@@ -3,287 +3,537 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>اتاق گفتگوی ساده و عمومی</title>
+    <title>ابزار پردازش داده‌ها</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Font - Vazirmatn for Persian -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght400;700&display=swap');
         body {
             font-family: 'Vazirmatn', sans-serif;
-            background-color: #f3f4f6;
+            background-color: #1a1a2e; /* Dark theme background */
+            color: #e4e4e7; /* Light text color */
         }
-        #messages-container {
-            height: 70vh;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column-reverse; /* New messages at the bottom */
-            padding-bottom: 1rem;
+        .container-card {
+            background-color: #2c2c54; /* Card background */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
         }
-        .chat-bubble-self {
-            background-color: #10b981; /* زمردی برای خودی */
-            color: white;
-            border-radius: 12px 12px 0 12px;
-            max-width: 80%;
+        .btn-primary {
+            transition: background-color 0.2s, transform 0.1s;
         }
-        .chat-bubble-other {
-            background-color: #e5e7eb; /* خاکستری روشن */
-            color: #1f2937;
-            border-radius: 12px 12px 12px 0;
-            max-width: 80%;
+        .btn-primary:hover {
+            transform: translateY(-1px);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        textarea, input[type="text"] {
+            background-color: #3b3b6b;
+            border-color: #5d5d8e;
+            color: #e4e4e7;
+        }
+        /* Style for the Decryption Result box to look distinct */
+        #decryptionOutput {
+             background-color: #3b3b6b; /* Darker background for result */
+             border-color: #a7f3d0; /* Light green border */
+             color: #a7f3d0; /* Light green text */
+             font-weight: 700;
+             font-size: 1.125rem; /* text-xl */
+        }
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2c2c54;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #5d5d8e;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #7a7ab3;
         }
     </style>
 </head>
 <body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
 
-    <div id="app-container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl overflow-hidden flex flex-col">
-        <header class="bg-blue-600 p-4 text-white text-center rounded-t-xl">
-            <h1 class="text-xl font-bold">اتاق گفتگوی عمومی</h1>
-            <p id="auth-status" class="text-sm mt-1">در حال اتصال...</p>
-        </header>
+    <div class="w-full max-w-4xl container-card p-6 md:p-10 rounded-xl space-y-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-center text-indigo-300">
+            🔗 ابزار پردازش داده‌ها
+        </h1>
+        
+        <!-- Key Input - HIGHLY VISIBLE & UNIFIED SECTION -->
+        <div class="space-y-3 border-4 border-yellow-500 rounded-xl p-4 bg-yellow-900/20">
+            <label for="keywordInput" class="block text-xl font-bold text-yellow-300 flex items-center">
+                <span class="text-3xl ml-2">🔑</span>
+                کلید:
+            </label>
+            <input type="text" id="keywordInput" value="secret" placeholder="کلید پردازش را وارد کنید"
+                   class="w-full p-3 rounded-lg border-2 text-xl font-mono text-center border-yellow-500 focus:ring-yellow-400 focus:border-yellow-400 text-white transition duration-150">
+        </div>
 
-        <!-- بخش چت - همیشه نمایش داده می شود (برای سادگی) -->
-        <div id="chat-area" class="flex flex-col flex-grow">
-            <div id="messages-container" class="p-4 flex-grow space-y-3">
-                <!-- پیام‌ها در اینجا اضافه خواهند شد -->
+
+        <!-- *** ۱. ENCRYPTION SECTION (تولید خروجی) *** -->
+        <div class="space-y-4 border-b pb-6 border-indigo-700 pt-4">
+            <h2 class="text-2xl font-semibold text-green-400">۱. تولید خروجی</h2>
+            
+            <div>
+                <label for="realInputText" class="block text-lg font-medium text-indigo-300 mb-2">ورودی:</label>
+                
+                <div class="relative">
+                    <!-- 1. Decoy Text Area (Always visible, shows the decoy text, read-only) -->
+                    <textarea id="decoyInputText" rows="5" readonly 
+                              placeholder="ورودی را اینجا وارد کنید..."
+                              class="w-full p-4 rounded-lg border-2 resize-none transition duration-150 border-gray-600 bg-gray-700/50 text-gray-400"></textarea>
+
+                    <!-- 2. Real Input Text Area (Handles user input, transparent, exactly layered) -->
+                    <textarea id="realInputText" rows="5" 
+                              placeholder="" 
+                              class="absolute top-0 left-0 w-full h-full p-4 rounded-lg border-2 resize-none focus:outline-none focus:border-green-500" 
+                              style="caret-color: white; color: transparent; background: transparent;"></textarea>
+                </div>
             </div>
             
-            <div id="message-input-area" class="p-4 bg-gray-50 border-t flex items-center">
-                <input type="text" id="messageInput" placeholder="پیام خود را بنویسید..." class="flex-grow p-3 border border-gray-300 rounded-full focus:ring-blue-500 focus:border-blue-500 ml-2" onkeyup="if(event.key === 'Enter') sendMessage()">
-                <button onclick="sendMessage()" class="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full transition duration-200 shadow-lg flex items-center justify-center w-12 h-12">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 transform -rotate-45 translate-x-1">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A5.996 5.996 0 0110.157 1L21.731 12 10.157 23A5.996 5.996 0 013.269 20.874L6 12z" />
-                    </svg>
-                </button>
+            <button id="encryptBtn" class="btn-primary w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl text-xl">
+                تولید
+            </button>
+
+            <!-- Encryption Output (Link-like Code) -->
+            <div class="space-y-2 pt-4">
+                <label for="outputText" class="block text-lg font-medium text-indigo-300">خروجی:</label>
+                <div class="relative">
+                    <textarea id="outputText" rows="2" readonly placeholder="خروجی اینجا ظاهر می‌شود."
+                              class="w-full p-4 rounded-lg border-2 text-gray-200 resize-none font-mono"></textarea>
+                    <button id="copyBtn" class="absolute top-2 right-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-1 px-3 rounded-lg text-sm transition duration-150">
+                        کپی
+                    </button>
+                </div>
             </div>
         </div>
         
-        <!-- نمایشگر پیام‌های وضعیت/خطا -->
-        <div id="status-message" class="p-4 bg-yellow-100 text-yellow-700 border-t border-yellow-300 hidden"></div>
+        <!-- *** ۲. DECRYPTION SECTION (بررسی ورودی) *** -->
+        <div class="space-y-4 pt-6">
+            <h2 class="text-2xl font-semibold text-red-400">۲. بررسی ورودی</h2>
+            
+            <div>
+                <label for="decryptionInput" class="block text-lg font-medium mb-2 text-indigo-300">ورودی برای بررسی:</label>
+                <!-- NEW INPUT FIELD FOR DECRYPTION -->
+                <textarea id="decryptionInput" rows="3" placeholder="داده برای پردازش را اینجا بچسبانید."
+                          class="w-full p-4 rounded-lg border-2 resize-none focus:ring-red-500 focus:border-red-500 transition duration-150"></textarea>
+            </div>
+            
+            <button id="decryptBtn" class="btn-primary w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl text-xl">
+                اجرا
+            </button>
+
+            <!-- Decryption Result -->
+            <div class="space-y-2 pt-4">
+                <label for="decryptionOutput" class="block text-lg font-medium text-indigo-300">نتیجه:</label>
+                <div class="relative">
+                    <!-- NEW OUTPUT FIELD FOR DECRYPTED TEXT (No reveal button) -->
+                    <textarea id="decryptionOutput" rows="2" readonly 
+                              placeholder="نتیجه پردازش اینجا نمایش داده می‌شود."
+                              data-secret=""
+                              class="w-full p-4 rounded-lg border-2 resize-none"></textarea>
+                    
+                    <!-- REVEAL BUTTON REMOVED AS PER USER REQUEST -->
+                </div>
+                <!-- TIMER MESSAGE REMOVED -->
+                <p id="autoHideMessage" class="hidden text-sm text-yellow-400 mt-2 text-center font-medium"></p>
+            </div>
+        </div>
+
+        <!-- Clear Button -->
+        <div class="flex justify-center pt-8 border-t border-indigo-700">
+             <button id="clearBtn" class="btn-primary w-full md:w-1/2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-xl text-lg">
+                پاکسازی
+            </button>
+        </div>
+
+        <!-- Alert Message -->
+        <div id="alertMessage" class="hidden text-center p-3 rounded-lg bg-indigo-800 text-indigo-100 font-medium transition duration-300" role="alert">
+            عملیات موفقیت آمیز بود!
+        </div>
     </div>
 
-    <!-- کتابخانه‌های Firebase -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <script>
+        const KEYWORD_STORAGE_KEY = 'vigenere_keyword_visible';
         
-        // تنظیمات فایربیس و متغیرهای سراسری
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const DEFAULT_ROOM_ID = 'public-chat-room'; // نام اتاق ثابت برای سادگی
-
-        // --- بهبود پیکربندی برای جلوگیری از خطای API Key ---
-        const defaultFirebaseConfig = { 
-            apiKey: "AIzaSy_dummy_key_to_prevent_auth_error", 
-            authDomain: "dummy-auth-domain.firebaseapp.com",
-            projectId: 'default-public-chat-project'
+        // --- ثابت پیام مورد نظر کاربر ---
+        // DECOY_TEXT_FULL changed to an empty string for completely invisible message
+        const DECOY_TEXT_FULL = ""; 
+        // عبارت فریبنده که هنگام تایپ کاربر نمایش داده می‌شود
+        const DECOY_PHRASE = "دانلود سریال جدید "; 
+        // ---------------------------------
+        
+        // --- Zero-Width Character Map for Quaternary Encoding (2 bits per char) ---
+        const INVISIBLE_CHARS = {
+            '00': '\u200B', 
+            '01': '\u200C', 
+            '10': '\u200D', 
+            '11': '\uFEFF',
         };
+        const VISIBLE_BITS = {
+            '\u200B': '00',
+            '\u200C': '01',
+            '\u200D': '10',
+            '\uFEFF': '11',
+        };
+
+        // --- Element References (Updated) ---
+        const realInputText = document.getElementById('realInputText'); 
+        const decoyInputText = document.getElementById('decoyInputText'); 
+
+        const encryptionOutputText = document.getElementById('outputText');
+        const decryptionInput = document.getElementById('decryptionInput'); 
+        const decryptionOutput = document.getElementById('decryptionOutput'); 
+
+        const keywordInput = document.getElementById('keywordInput'); 
+        const encryptBtn = document.getElementById('encryptBtn');
+        const decryptBtn = document.getElementById('decryptBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const clearBtn = document.getElementById('clearBtn'); 
+        const alertMessage = document.getElementById('alertMessage');
         
-        let firebaseConfig;
-        try {
-            // تلاش برای استفاده از پیکربندی محیطی
-            if (typeof __firebase_config !== 'undefined' && __firebase_config.length > 5) {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } else {
-                firebaseConfig = defaultFirebaseConfig;
-            }
-        } catch (e) {
-            console.error("خطا در تجزیه پیکربندی فایربیس، استفاده از پیش‌فرض:", e);
-            firebaseConfig = defaultFirebaseConfig;
-        }
-        // --- پایان بهبود پیکربندی ---
+        // New elements (revealBtn removed, revealTimerMessage renamed)
+        const autoHideMessage = document.getElementById('autoHideMessage');
+        let autoHideTimer = null; // Timer for auto-hiding decrypted message
 
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let app, db, auth;
-        let currentUserId = null;
-        let unsubscribeFromChat = null;
-        let isAuthReady = false; // پرچم جدید برای اطمینان از آمادگی احراز هویت
-        let currentRoomId = DEFAULT_ROOM_ID; // از اتاق ثابت استفاده می کنیم
-
-        // --- توابع کمکی (Utilities) ---
-        
-        /**
-         * نمایش پیام وضعیت/خطا
-         * @param {string} message - متن پیام
-         * @param {string} type - نوع پیام ('error', 'info', 'success')
-         */
-        function showStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.textContent = message;
-            statusDiv.className = 'p-4 border-t';
-            statusDiv.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-yellow-100', 'text-yellow-700', 'bg-green-100', 'text-green-700');
-            
-            if (type === 'error') {
-                statusDiv.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
-            } else if (type === 'success') {
-                statusDiv.classList.add('bg-green-100', 'text-green-700', 'border-green-300');
-            } else {
-                statusDiv.classList.add('bg-yellow-100', 'text-yellow-700', 'border-yellow-300');
-            }
-            statusDiv.style.display = 'block';
-            
-            // خودکار پنهان کردن پیام پس از 5 ثانیه (فقط برای info/success)
-            if (type !== 'error') {
-                setTimeout(() => {
-                    statusDiv.classList.add('hidden');
-                }, 5000);
-            }
+        // --- Initialization: Load key from local storage ---
+        const savedKeyword = localStorage.getItem(KEYWORD_STORAGE_KEY);
+        if (savedKeyword) {
+            keywordInput.value = savedKeyword;
+        } else {
+            localStorage.setItem(KEYWORD_STORAGE_KEY, keywordInput.value);
         }
         
-        // --- توابع اصلی Firebase و منطق چت ---
+        // --- Utility Functions ---
 
         /**
-         * راه‌اندازی فایربیس و احراز هویت
+         * Safely converts a Unicode string to Base64 ASCII string.
          */
-        async function initializeFirebase() {
-            try {
-                setLogLevel('error'); // فقط خطاهای مهم را نمایش بده
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                document.getElementById('auth-status').textContent = 'در حال احراز هویت...';
+        function b64EncodeUnicode(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+                function(match, p1) {
+                    return String.fromCharCode('0x' + p1);
+                }));
+        }
 
-                // ** گام اول: تنظیم شنونده برای ثبت وضعیت احراز هویت نهایی **
-                onAuthStateChanged(auth, (user) => {
-                    isAuthReady = true; 
-                    if (user) {
-                        currentUserId = user.uid;
-                        document.getElementById('auth-status').textContent = 'اتصال برقرار است | Room: ' + currentRoomId + ' | User ID: ' + user.uid.substring(0, 8) + '...';
-                        startChatListener(currentRoomId);
-                        showStatus("اتصال با موفقیت برقرار شد. اکنون می‌توانید پیام ارسال کنید.", 'success');
-                    } else {
-                        currentUserId = null;
-                        document.getElementById('auth-status').textContent = 'احراز هویت ناموفق.';
-                        showStatus("احراز هویت ناموفق (خطا در اتصال یا قوانین امنیتی).", 'error');
-                    }
-                });
-                
-                // ** گام دوم: تلاش برای ورود به سیستم **
-                let signedIn = false;
-                
-                // 1. تلاش با توکن سفارشی (اولویت محیطی)
-                if (initialAuthToken) {
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        signedIn = true;
-                    } catch (tokenError) {
-                        // اگر توکن سفارشی نامعتبر بود، به تلاش بعدی می‌رویم
-                        console.error("خطا در Custom Token، تلاش برای Anonymous sign-in:", tokenError);
-                        document.getElementById('auth-status').textContent = 'توکن نامعتبر، تلاش برای اتصال ناشناس...';
-                    }
+        /**
+         * Safely converts a Base64 ASCII string back to the original Unicode string.
+         */
+        function b64DecodeUnicode(str) {
+            return decodeURIComponent(atob(str).split('').map(function(c) {
+                return '%' + ('00' + c.codePointAt(0).toString(16)).slice(-2);
+            }).join(''));
+        }
+
+        /**
+         * Converts the Base64 (ASCII) encoded string into a completely invisible string
+         * using Zero-Width Characters (Quaternary Encoding: 2 bits per char).
+         */
+        function encodeToInvisible(text) {
+            let binary = '';
+            // 1. Convert Base64 string to a long binary string
+            for (let i = 0; i < text.length; i++) {
+                // Get the ASCII code point, then convert to 8-bit binary string
+                let byte = text.codePointAt(i);
+                binary += byte.toString(2).padStart(8, '0');
+            }
+
+            let invisible = '';
+            // 2. Convert binary string to Zero-Width characters (2 bits at a time)
+            for (let i = 0; i < binary.length; i += 2) {
+                const quad = binary.substring(i, i + 2);
+                if (quad.length === 2) {
+                    invisible += INVISIBLE_CHARS[quad];
                 }
+            }
+            return invisible;
+        }
 
-                // 2. اگر هنوز وارد نشده‌ایم، تلاش با احراز هویت ناشناس (فال‌بک نهایی)
-                if (!signedIn) {
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (anonymousError) {
-                        console.error("خطا در signInAnonymously:", anonymousError);
-                        // اجازه می‌دهیم onAuthStateChanged وضعیت نهایی شکست را ثبت کند.
-                    }
+        /**
+         * Decodes the invisible string (Zero-Width Characters) back to the Base64 ASCII string.
+         */
+        function decodeFromInvisible(invisibleText) {
+            let binary = '';
+            // 1. Convert Zero-Width chars back to binary string
+            for (let i = 0; i < invisibleText.length; i++) {
+                const char = invisibleText[i];
+                if (VISIBLE_BITS[char]) {
+                    binary += VISIBLE_BITS[char];
                 }
-
-            } catch (error) {
-                console.error("خطا فاجعه‌بار در راه‌اندازی Firebase:", error);
-                isAuthReady = true; 
-                showStatus("خطا در راه‌اندازی برنامه. اطلاعات پیکربندی نامعتبر است.", 'error');
+                // Ignore any characters not in our map (e.g., standard spaces, newlines)
             }
+
+            let resultText = '';
+            // 2. Convert binary string back to text (8 bits at a time)
+            for (let i = 0; i < binary.length; i += 8) {
+                const byteString = binary.substring(i, i + 8);
+                if (byteString.length === 8) {
+                    const charCode = parseInt(byteString, 2);
+                    resultText += String.fromCodePoint(charCode);
+                }
+            }
+            return resultText;
+        }
+
+
+        function showAlert(message, duration = 3000) {
+            alertMessage.textContent = message;
+            alertMessage.classList.remove('hidden', 'bg-indigo-800', 'bg-red-800', 'bg-green-800');
+            let bgColor = 'bg-indigo-800'; 
+            if (message.includes('خطا') || message.includes('❌')) {
+                bgColor = 'bg-red-800';
+            } else if (message.includes('موفق')) {
+                bgColor = 'bg-green-800';
+            }
+            alertMessage.classList.add(bgColor);
+            clearTimeout(alertMessage.timer);
+            alertMessage.timer = setTimeout(() => {
+                alertMessage.classList.add('hidden');
+            }, duration);
         }
 
         /**
-         * راه‌اندازی شنونده لحظه‌ای پیام‌ها
-         * @param {string} roomId - نام اتاق
+         * رمز ویژنر جهانی (Vigenère Cipher) بر روی تمام کاراکترهای یونیکد.
          */
-        function startChatListener(roomId) {
-            if (unsubscribeFromChat) {
-                unsubscribeFromChat(); // قطع اتصال قبلی اگر وجود داشت
-            }
-            
-            // مسیر کالکشن: /artifacts/{appId}/public/data/public_chats/{roomId}/messages
-            const messagesRef = collection(db, `/artifacts/${appId}/public/data/public_chats/${roomId}/messages`);
-            const q = query(messagesRef, orderBy("timestamp", "desc")); // گرفتن جدیدترین پیام‌ها ابتدا
-            
-            // onSnapshot برای دریافت لحظه‌ای تغییرات
-            unsubscribeFromChat = onSnapshot(q, (snapshot) => {
-                const messagesContainer = document.getElementById('messages-container');
-                messagesContainer.innerHTML = ''; // پاک کردن پیام‌های قبلی
+        function vigenereCipher(text, keyword, decrypt = false) {
+            let result = '';
+            const CLEANED_KEYWORD = keyword.trim();
+            if (CLEANED_KEYWORD.length === 0) return text; 
+            const KEYWORD_LENGTH = CLEANED_KEYWORD.length;
+
+            for (let i = 0, j = 0; i < text.length; i++, j++) {
                 
-                snapshot.docs.forEach(async doc => {
-                    const data = doc.data();
-                    const senderId = data.userId;
-                    const isSelf = senderId === currentUserId;
-                    
-                    const messageElement = document.createElement('div');
-                    messageElement.className = 'w-full flex ' + (isSelf ? 'justify-end' : 'justify-start');
-                    
-                    const bubble = document.createElement('div');
-                    bubble.className = 'p-3 text-sm break-words shadow-md ' + (isSelf ? 'chat-bubble-self' : 'chat-bubble-other');
-                    
-                    // نمایش پیام
-                    const messageText = data.text || 'پیام نامعتبر';
-                    bubble.textContent = messageText;
-                    
-                    // اضافه کردن زمان (اختیاری)
-                    const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : '...';
-                    const timeSpan = document.createElement('span');
-                    timeSpan.textContent = time;
-                    timeSpan.className = 'block mt-1 text-xs opacity-75 ' + (isSelf ? 'text-right' : 'text-left');
-                    bubble.appendChild(timeSpan);
-                    
-                    messageElement.appendChild(bubble);
-                    messagesContainer.appendChild(messageElement);
-                });
-            }, (error) => {
-                console.error("خطا در دریافت پیام‌ها:", error);
-                showStatus("خطا در اتصال لحظه‌ای به چت. دسترسی پایگاه داده را بررسی کنید.", 'error');
-            });
+                // 1. Get Key Character Code Point
+                let keyCharIndex = j % KEYWORD_LENGTH;
+                let keyChar = CLEANED_KEYWORD.codePointAt(keyCharIndex);
+
+                // 2. Adjust keyword index for multi-byte characters (Emojis in key)
+                if (keyChar > 0xFFFF) j++; 
+                
+                // 3. Get Text Character Code Point
+                let textChar = text.codePointAt(i);
+
+                // 4. Adjust text index for multi-byte characters (Emojis in text)
+                if (textChar > 0xFFFF) i++; 
+                
+                // Calculate Shift
+                let shift = decrypt ? -keyChar : keyChar;
+
+                let newCodePoint = textChar + shift;
+                
+                // 5. Apply shift
+                result += String.fromCodePoint(newCodePoint);
+            }
+            return result;
         }
-
-        /**
-         * ارسال پیام به صورت متن ساده
-         */
-        window.sendMessage = async function() {
-            const messageInput = document.getElementById('messageInput');
-            const plaintext = messageInput.value.trim();
-
-            if (!plaintext) {
-                return; // پیام خالی ارسال نمی‌شود
+        
+        // --- Decoy Display Management ---
+        
+        function updateDecoyDisplay() {
+            const realLength = realInputText.value.length;
+            if (realLength === 0) {
+                decoyInputText.value = '';
+                decoyInputText.placeholder = 'ورودی را اینجا وارد کنید...'; // Generic placeholder
+                return;
             }
             
-            // بررسی آمادگی سرویس‌ها: استفاده از isAuthReady برای چک نهایی
-            if (!isAuthReady || !currentUserId || !db) {
-                showStatus("اتصال هنوز برقرار نیست. لطفاً صبر کنید تا وضعیت 'اتصال برقرار است' شود.", 'error');
+            // Repeat the phrase until it's longer than the real message, then truncate.
+            const repeatCount = Math.ceil(realLength / DECOY_PHRASE.length) + 1;
+            let decoyDisplay = DECOY_PHRASE.repeat(repeatCount).substring(0, realLength);
+            
+            // Set the visible value to the decoy text
+            decoyInputText.value = decoyDisplay;
+            
+            // Crucial: Keep the scroll position of the decoy aligned with the real input
+            decoyInputText.scrollTop = realInputText.scrollTop;
+        }
+
+        // --- Cipher Handlers ---
+
+        function handleEncryption() {
+            const realMessage = realInputText.value;
+            const keyword = keywordInput.value;
+
+            // Clear previous decryption state if any
+            decryptionOutput.value = '';
+            decryptionOutput.dataset.secret = '';
+            autoHideMessage.classList.add('hidden');
+            clearTimeout(autoHideTimer);
+
+            if (keyword.trim() === "") {
+                encryptionOutputText.value = "خطا: کلید لازم است.";
+                showAlert(encryptionOutputText.value, 4000);
+                return;
+            }
+            if (realMessage.trim() === "") {
+                 encryptionOutputText.value = "خطا: ورودی لازم است.";
+                 showAlert(encryptionOutputText.value, 3000);
                 return;
             }
 
             try {
-                // ساخت مرجع کالکشن جدید برای چت عمومی
-                const messagesRef = collection(db, `/artifacts/${appId}/public/data/public_chats/${currentRoomId}/messages`);
+                // 1. Vigenere Encrypt (Raw Unicode string)
+                const realCipher = vigenereCipher(realMessage, keyword, false);
                 
-                // ارسال به فایربیس
-                await addDoc(messagesRef, {
-                    userId: currentUserId,
-                    text: plaintext, // ذخیره پیام به صورت متن ساده
-                    timestamp: serverTimestamp()  // مهر زمانی سرور
-                });
-                
-                messageInput.value = ''; // پاک کردن ورودی
-                messageInput.focus();
-                
-                // پیام وضعیت را پنهان کنید
-                document.getElementById('status-message').classList.add('hidden');
+                // 2. Base64 Encode the RAW cipher (ASCII-safe string)
+                const base64Cipher = b64EncodeUnicode(realCipher);
 
+                // 3. Convert Base64 string to a completely invisible string of Zero-Width characters
+                const invisibleCipher = encodeToInvisible(base64Cipher);
+
+                // 4. Construct the final output: Visible Decoy Text + Invisible Cipher (DECOY_TEXT_FULL is now "")
+                const finalOutput = DECOY_TEXT_FULL + invisibleCipher;
+
+                // Output to the dedicated encryption output
+                encryptionOutputText.value = finalOutput;
+                
+                // پاکسازی ورودی پس از رمزگذاری موفق
+                realInputText.value = ''; // Clear the real secret
+                decoyInputText.value = ''; // Clear the decoy display
+                
+                showAlert("عملیات تولید موفق.", 5000);
             } catch (e) {
-                console.error("خطا در ارسال پیام:", e);
-                showStatus("خطا در ارسال پیام. ممکن است قوانین امنیتی پایگاه داده شما اجازه ارسال ندهد.", 'error');
+                encryptionOutputText.value = "خطا در پردازش. (Error: " + e.message + ")";
+                showAlert(encryptionOutputText.value, 7000);
+                console.error("Encryption Error:", e);
             }
         }
 
-        // --- شروع برنامه ---
-        window.onload = initializeFirebase;
+        function handleDecryption() {
+            const encryptedText = decryptionInput.value.trim();
+            const keyword = keywordInput.value; 
+
+            // Always clear previous timer on new decryption attempt
+            clearTimeout(autoHideTimer); 
+            decryptionOutput.value = '';
+            decryptionOutput.dataset.secret = '';
+            autoHideMessage.classList.add('hidden');
+
+
+            if (keyword.trim() === "") {
+                decryptionOutput.value = "خطا: کلید لازم است.";
+                showAlert(decryptionOutput.value, 4000);
+                return;
+            }
+            if (encryptedText === "") {
+                 decryptionOutput.value = "خطا: ورودی لازم است.";
+                 showAlert(decryptionOutput.value, 3000);
+                return;
+            }
+
+            try {
+                // 1. Extract the invisible part (everything after the decoy text)
+                // Since DECOY_TEXT_FULL is "", this takes the entire input string
+                const invisibleCipher = encryptedText.substring(DECOY_TEXT_FULL.length);
+
+                if (invisibleCipher.length === 0) {
+                     decryptionOutput.value = "خطا: داده نامعتبر.";
+                    showAlert(decryptionOutput.value, 7000);
+                    return;
+                }
+
+                // 2. Decode the invisible string back to Base64 ASCII string
+                const base64Cipher = decodeFromInvisible(invisibleCipher);
+
+                // 3. Base64 Decode the string to get the RAW Vigenere cipher text
+                const realCipher = b64DecodeUnicode(base64Cipher);
+
+                // 4. Decrypt the real cipher text
+                const decryptedText = vigenereCipher(realCipher, keyword, true); 
+                
+                // --- IMMEDIATE REVEAL & AUTO-HIDE (5 SECONDS) ---
+                decryptionOutput.value = decryptedText; 
+                // autoHideMessage.classList.remove('hidden'); // Removed visual hint
+
+                decryptionInput.value = ''; // Clear input after successful decryption
+                showAlert("پردازش موفق.", 5000);
+
+                // Set auto-hide timer (5 seconds = 5000ms)
+                autoHideTimer = setTimeout(() => {
+                    decryptionOutput.value = ''; // Clear the message completely
+                    decryptionOutput.placeholder = "نتیجه پردازش اینجا نمایش داده می‌شود.";
+                    // autoHideMessage.classList.add('hidden'); // Removed visual hint
+                    showAlert("پنهان‌سازی خودکار.", 2000);
+                }, 5000); // 5 seconds delay
+
+            } catch (e) {
+                decryptionOutput.value = "خطا در پردازش. لطفاً از صحت کلید و داده ورودی مطمئن شوید.";
+                showAlert(decryptionOutput.value, 7000);
+                console.error("Decryption error:", e);
+            }
+        }
+
+        function copyToClipboard() {
+            if (encryptionOutputText.value) {
+                // Select the text for copying (including the hidden parts)
+                encryptionOutputText.select(); 
+                document.execCommand('copy');
+                setTimeout(() => {
+                    encryptionOutputText.blur();
+                }, 500);
+                showAlert("کپی شد.", 2500);
+            }
+        }
+        
+        function clearAllFields() {
+            clearTimeout(autoHideTimer); // Clear auto-hide timer
+            
+            realInputText.value = ''; 
+            decoyInputText.value = ''; 
+            encryptionOutputText.value = '';
+            decryptionInput.value = ''; 
+            decryptionOutput.value = ''; 
+            decryptionOutput.dataset.secret = ''; // Clear stored secret
+            autoHideMessage.classList.add('hidden'); // Keep hidden
+
+            decoyInputText.placeholder = 'ورودی را اینجا وارد کنید...'; // Reset placeholder
+            decryptionOutput.placeholder = "نتیجه پردازش اینجا نمایش داده می‌شود."; // Reset placeholder
+            
+            realInputText.focus();
+            showAlert("پاکسازی انجام شد.", 2000);
+        }
+
+        // --- Event Listeners ---
+        
+        // Handle input events on the REAL input to update the visual decoy
+        realInputText.addEventListener('input', updateDecoyDisplay);
+        
+        // Keep the decoy's scroll aligned with the real input (for long messages)
+        realInputText.addEventListener('scroll', () => {
+             decoyInputText.scrollTop = realInputText.scrollTop;
+        });
+
+        // ENCRYPTION - Enter Key Listener (Use realInputText)
+        realInputText.addEventListener('keydown', (e) => {
+            // Check for Enter key (not Shift+Enter)
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); 
+                handleEncryption();
+            }
+        });
+
+        // DECRYPTION - Enter Key Listener
+        decryptionInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); 
+                handleDecryption();
+            }
+        });
+
+
+        // Button listeners
+        encryptBtn.addEventListener('click', handleEncryption);
+        decryptBtn.addEventListener('click', handleDecryption);
+        copyBtn.addEventListener('click', copyToClipboard);
+        clearBtn.addEventListener('click', clearAllFields); 
+
+        // Save keyword to localStorage on every change
+        keywordInput.addEventListener('input', (e) => {
+             localStorage.setItem(KEYWORD_STORAGE_KEY, e.target.value);
+        });
     </script>
 </body>
 </html>
