@@ -3,24 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>اتاق گفتگوی عمومی</title>
+    <title>اتاق گفتگوی ساده و عمومی</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Font - Inter (برای متن انگلیسی) و فونت‌های فارسی مناسب -->
+    <!-- Google Font - Vazirmatn for Persian -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
         body {
             font-family: 'Vazirmatn', sans-serif;
+            background-color: #f3f4f6;
         }
-        /* استایل سفارشی برای نوار پیام‌ها و پیمایش */
         #messages-container {
             height: 70vh;
             overflow-y: auto;
             display: flex;
-            flex-direction: column-reverse; /* پیام‌های جدید در پایین */
+            flex-direction: column-reverse; /* New messages at the bottom */
+            padding-bottom: 1rem;
         }
         .chat-bubble-self {
-            background-color: #3b82f6; /* آبی روشن */
+            background-color: #10b981; /* زمردی برای خودی */
             color: white;
             border-radius: 12px 12px 0 12px;
             max-width: 80%;
@@ -33,32 +34,16 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 p-4 md:p-8 min-h-screen flex items-center justify-center">
+<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
 
-    <div id="app-container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl overflow-hidden">
+    <div id="app-container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl overflow-hidden flex flex-col">
         <header class="bg-blue-600 p-4 text-white text-center rounded-t-xl">
             <h1 class="text-xl font-bold">اتاق گفتگوی عمومی</h1>
-            <p id="auth-status" class="text-sm mt-1"></p>
+            <p id="auth-status" class="text-sm mt-1">در حال اتصال...</p>
         </header>
 
-        <!-- بخش تنظیمات ورود -->
-        <div id="setup-area" class="p-6 space-y-4">
-            <h2 class="text-lg font-semibold text-gray-700">ورود به اتاق چت</h2>
-            <p class="text-sm text-gray-500">
-                این یک اتاق گفتگوی عمومی است. هر کسی که نام اتاق (Room ID) مشترک را وارد کند، می‌تواند پیام‌ها را ببیند.
-            </p>
-            <div class="space-y-3">
-                <input type="text" id="roomId" placeholder="نام اتاق (Room ID) - باید مشترک باشد" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" value="public-chat-123">
-                <!-- کلید رمز حذف شد -->
-                <button onclick="connectToChat()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md">
-                    ورود و اتصال
-                </button>
-            </div>
-            <p class="text-xs text-gray-500 mt-2">شناسه کاربری شما: <span id="user-id-display">در حال بارگذاری...</span></p>
-        </div>
-
-        <!-- بخش چت -->
-        <div id="chat-area" class="hidden flex flex-col h-full">
+        <!-- بخش چت - همیشه نمایش داده می شود (برای سادگی) -->
+        <div id="chat-area" class="flex flex-col flex-grow">
             <div id="messages-container" class="p-4 flex-grow space-y-3">
                 <!-- پیام‌ها در اینجا اضافه خواهند شد -->
             </div>
@@ -74,7 +59,7 @@
         </div>
         
         <!-- نمایشگر پیام‌های وضعیت/خطا -->
-        <div id="status-message" class="hidden p-4 bg-yellow-100 text-yellow-700 border-t border-yellow-300"></div>
+        <div id="status-message" class="p-4 bg-yellow-100 text-yellow-700 border-t border-yellow-300 hidden"></div>
     </div>
 
     <!-- کتابخانه‌های Firebase -->
@@ -86,12 +71,9 @@
         
         // تنظیمات فایربیس و متغیرهای سراسری
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        // --- شروع اصلاحیه برای رفع خطای 'auth/invalid-api-key' ---
+        const DEFAULT_ROOM_ID = 'public-chat-room'; // نام اتاق ثابت برای سادگی
 
-        // تعریف یک تنظیمات پیش‌فرض کامل‌تر برای فایربیس. 
-        // این کار تضمین می‌کند که حتی در صورت عدم دسترسی به __firebase_config، 
-        // آبجکت config حداقل ساختار لازم برای initializeAuth را داشته باشد.
+        // --- بهبود پیکربندی برای جلوگیری از خطای API Key ---
         const defaultFirebaseConfig = { 
             apiKey: "AIzaSy_dummy_key_to_prevent_auth_error", 
             authDomain: "dummy-auth-domain.firebaseapp.com",
@@ -100,26 +82,24 @@
         
         let firebaseConfig;
         try {
-            // اگر __firebase_config تعریف شده و محتوای معتبری داشته باشد، از آن استفاده کن.
             if (typeof __firebase_config !== 'undefined' && __firebase_config.length > 5) {
                 firebaseConfig = JSON.parse(__firebase_config);
             } else {
-                // در غیر این صورت، از پیکربندی پیش‌فرض استفاده کن.
                 firebaseConfig = defaultFirebaseConfig;
             }
         } catch (e) {
             console.error("خطا در تجزیه پیکربندی فایربیس، استفاده از پیش‌فرض:", e);
             firebaseConfig = defaultFirebaseConfig;
         }
-
-        // --- پایان اصلاحیه ---
+        // --- پایان بهبود پیکربندی ---
 
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
         let currentUserId = null;
         let unsubscribeFromChat = null;
-        let currentRoomId = null;
+        let isAuthReady = false; // پرچم جدید برای اطمینان از آمادگی احراز هویت
+        let currentRoomId = DEFAULT_ROOM_ID; // از اتاق ثابت استفاده می کنیم
 
         // --- توابع کمکی (Utilities) ---
         
@@ -142,6 +122,13 @@
                 statusDiv.classList.add('bg-yellow-100', 'text-yellow-700', 'border-yellow-300');
             }
             statusDiv.style.display = 'block';
+            
+            // خودکار پنهان کردن پیام پس از 5 ثانیه (فقط برای info/success)
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 5000);
+            }
         }
         
         // --- توابع اصلی Firebase و منطق چت ---
@@ -151,7 +138,7 @@
          */
         async function initializeFirebase() {
             try {
-                setLogLevel('error'); // تنظیم سطح لاگ به "error" برای کاهش نویز در کنسول
+                setLogLevel('error');
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -165,55 +152,26 @@
                     await signInAnonymously(auth);
                 }
 
-                // گرفتن شناسه کاربری پس از احراز هویت
+                // گرفتن شناسه کاربری پس از احراز هویت و شروع شنونده چت
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         currentUserId = user.uid;
-                        document.getElementById('auth-status').textContent = 'اتصال برقرار است. شناسه کاربری: ' + user.uid.substring(0, 8) + '...';
-                        document.getElementById('user-id-display').textContent = user.uid;
-                        // اگر کاربر از قبل در صفحه تنظیمات بود، آماده اتصال به چت
-                        if (currentRoomId) {
-                            startChatListener(currentRoomId);
-                        }
+                        isAuthReady = true; // احراز هویت کامل شد
+                        document.getElementById('auth-status').textContent = 'اتصال برقرار است | Room: ' + currentRoomId + ' | User ID: ' + user.uid.substring(0, 8) + '...';
+                        // شروع شنونده پیام‌ها بلافاصله پس از احراز هویت
+                        startChatListener(currentRoomId);
+                        showStatus("اتصال با موفقیت برقرار شد. اکنون می‌توانید پیام ارسال کنید.", 'success');
                     } else {
                         currentUserId = null;
+                        isAuthReady = true; 
                         document.getElementById('auth-status').textContent = 'احراز هویت ناموفق.';
+                        showStatus("احراز هویت ناموفق. لطفاً مجدداً صفحه را بارگذاری کنید.", 'error');
                     }
                 });
 
             } catch (error) {
                 console.error("خطا در راه‌اندازی Firebase:", error);
-                // نمایش خطای عمومی‌تر برای کاربر نهایی به جز خطای API Key که با اصلاحیه حل می‌شود
-                if (error.code !== 'auth/invalid-api-key') {
-                    showStatus("خطا در راه‌اندازی برنامه. لطفاً کنسول را بررسی کنید.", 'error');
-                } else {
-                    showStatus("خطا در اتصال: کلید API فایربیس نامعتبر است. مشکل برطرف شد، لطفاً صفحه را رفرش کنید.", 'error');
-                }
-            }
-        }
-
-        /**
-         * اتصال به اتاق چت و شروع شنیدن پیام‌ها
-         */
-        window.connectToChat = async function() {
-            const roomId = document.getElementById('roomId').value.trim();
-
-            if (!roomId) {
-                showStatus("لطفاً نام اتاق را وارد کنید.", 'info');
-                return;
-            }
-            
-            // ذخیره نام اتاق
-            currentRoomId = roomId;
-
-            // 2. تغییر حالت UI
-            document.getElementById('setup-area').classList.add('hidden');
-            document.getElementById('chat-area').classList.remove('hidden');
-            showStatus("اتصال به اتاق " + roomId + " برقرار شد. چت عمومی است.", 'success');
-            
-            // 3. شروع شنونده پیام‌ها (اگر احراز هویت کامل شده باشد)
-            if (currentUserId) {
-                startChatListener(roomId);
+                showStatus("خطا در راه‌اندازی برنامه. لطفاً کنسول را بررسی کنید.", 'error');
             }
         }
 
@@ -226,7 +184,7 @@
                 unsubscribeFromChat(); // قطع اتصال قبلی اگر وجود داشت
             }
             
-            // مسیر کالکشن برای چت عمومی
+            // مسیر کالکشن: /artifacts/{appId}/public/data/public_chats/{roomId}/messages
             const messagesRef = collection(db, `/artifacts/${appId}/public/data/public_chats/${roomId}/messages`);
             const q = query(messagesRef, orderBy("timestamp", "desc")); // گرفتن جدیدترین پیام‌ها ابتدا
             
@@ -246,7 +204,7 @@
                     const bubble = document.createElement('div');
                     bubble.className = 'p-3 text-sm break-words shadow-md ' + (isSelf ? 'chat-bubble-self' : 'chat-bubble-other');
                     
-                    // نمایش پیام به صورت متن ساده
+                    // نمایش پیام
                     const messageText = data.text || 'پیام نامعتبر';
                     bubble.textContent = messageText;
                     
@@ -262,7 +220,7 @@
                 });
             }, (error) => {
                 console.error("خطا در دریافت پیام‌ها:", error);
-                showStatus("خطا در اتصال لحظه‌ای به چت.", 'error');
+                showStatus("خطا در اتصال لحظه‌ای به چت. دسترسی پایگاه داده را بررسی کنید.", 'error');
             });
         }
 
@@ -277,19 +235,9 @@
                 return; // پیام خالی ارسال نمی‌شود
             }
             
-            // بررسی آمادگی سرویس‌ها
-            if (!currentRoomId) {
-                showStatus("لطفاً ابتدا وارد اتاق چت شوید.", 'error');
-                return;
-            }
-            
-            if (!currentUserId) {
-                showStatus("در حال اتصال به سرویس هستید. لطفاً صبر کنید تا احراز هویت کامل شود.", 'error');
-                return;
-            }
-
-            if (!db) {
-                showStatus("سرویس پایگاه داده (Firebase) آماده نیست.", 'error');
+            // بررسی آمادگی سرویس‌ها: استفاده از isAuthReady برای چک نهایی
+            if (!isAuthReady || !currentUserId || !db) {
+                showStatus("اتصال هنوز برقرار نیست. لطفاً صبر کنید تا وضعیت 'اتصال برقرار است' شود.", 'error');
                 return;
             }
 
@@ -307,13 +255,12 @@
                 messageInput.value = ''; // پاک کردن ورودی
                 messageInput.focus();
                 
-                // پیام وضعیت را پنهان کنید اگر قبلا پیامی نمایش داده شده بود
-                document.getElementById('status-message').style.display = 'none';
+                // پیام وضعیت را پنهان کنید
+                document.getElementById('status-message').classList.add('hidden');
 
             } catch (e) {
                 console.error("خطا در ارسال پیام:", e);
-                // اگر خطای Firestore رخ دهد، یک پیام خطا به کاربر نمایش دهید
-                showStatus("خطا در ارسال پیام. مشکل اتصال یا دسترسی را بررسی کنید.", 'error');
+                showStatus("خطا در ارسال پیام. ممکن است قوانین امنیتی پایگاه داده شما اجازه ارسال ندهد.", 'error');
             }
         }
 
