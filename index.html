@@ -34,6 +34,12 @@
             <h1 class="text-3xl font-extrabold text-gray-800">✉️ تابلوی پیام عمومی</h1>
             <p class="text-gray-500 mt-2">پیامی بنویسید تا همه کسانی که این صفحه را باز می‌کنند، آن را به صورت لحظه‌ای ببینند.</p>
         </header>
+        
+        <!-- جعبه نمایش خطاهای حیاتی (جدید) -->
+        <div id="global-error" class="bg-red-100 border-r-4 border-red-500 text-red-700 p-4 mb-4 rounded-lg shadow-md hidden" role="alert">
+            <p class="font-bold">خطای حیاتی در اتصال:</p>
+            <p id="error-details" class="text-sm mt-1"></p>
+        </div>
 
         <!-- وضعیت اتصال و شناسه کاربری -->
         <div id="status-bar" class="text-center mb-4 p-2 bg-indigo-100 text-indigo-700 rounded-lg shadow-sm hidden">
@@ -69,7 +75,7 @@
                     ارسال پیام
                 </button>
             </form>
-            <p id="error-message" class="text-red-500 mt-2 text-sm hidden">خطا در ارسال پیام. لطفاً دوباره تلاش کنید.</p>
+            <p id="form-error-message" class="text-red-500 mt-2 text-sm hidden">خطا در ارسال پیام. لطفاً دوباره تلاش کنید.</p>
         </div>
     </div>
 
@@ -86,10 +92,10 @@
         // تنظیمات عمومی Firebase (توسط محیط کاری فراهم می‌شود)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; // توکن سفارشی مجدداً تعریف شد
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
         let db, auth, userId = null; 
-        let isListenerSetup = false; // پرچم جدید برای جلوگیری از شنونده‌های تکراری
+        let isListenerSetup = false; 
         const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
 
         const messageInput = document.getElementById('message-input');
@@ -98,13 +104,24 @@
         const loadingMessage = document.getElementById('loading-message');
         const authStatus = document.getElementById('auth-status');
         const userIdDisplay = document.getElementById('user-id-display');
-        const errorElement = document.getElementById('error-message');
-        const statusBar = document.getElementById('status-bar');
+        const statusBar = document.getElementById('status-bar'); // <-- اصلاح: تعریف متغیر statusBar
+        
+        // عناصر جدید نمایش خطا
+        const globalErrorDiv = document.getElementById('global-error');
+        const errorDetailsP = document.getElementById('error-details');
+        const formErrorElement = document.getElementById('form-error-message');
+
 
         // فعال کردن لاگ‌های دیباگ (برای رفع مشکلات مجوز)
-        // setLogLevel('debug'); 
+        setLogLevel('debug'); 
 
         // --- توابع کمکی ---
+
+        // تابع نمایش خطای عمومی
+        function displayGlobalError(message) {
+            errorDetailsP.textContent = message;
+            globalErrorDiv.classList.remove('hidden');
+        }
 
         // تابع برای تبدیل زمان‌بندی Firebase به یک رشته قابل خواندن 
         function formatTimestamp(timestamp) {
@@ -182,8 +199,9 @@
                         userId = user.uid; // استفاده از شناسه واقعی Firebase
                         userIdDisplay.textContent = `شناسه کاربری: ${userId.substring(0, 8)}...`;
                         authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
-                        statusBar.classList.remove('hidden');
+                        statusBar.classList.remove('hidden'); // <-- در اینجا استفاده می‌شود
                         sendButton.disabled = false;
+                        globalErrorDiv.classList.add('hidden'); // پاک کردن خطای احراز هویت در صورت موفقیت
                         
                         // فقط در صورتی شنونده را راه‌اندازی کن که قبلاً انجام نشده باشد
                         if (!isListenerSetup) {
@@ -207,6 +225,7 @@
             } catch (error) {
                 console.error("خطا در راه‌اندازی Firebase:", error);
                 authStatus.textContent = 'خطا در اتصال: ' + error.message;
+                displayGlobalError(`خطای احراز هویت (Auth): ${error.message}`); // نمایش خطای دقیق Auth
             }
         }
 
@@ -217,7 +236,7 @@
             // ساخت کوئری: گرفتن مجموعه پیام‌ها و مرتب‌سازی بر اساس زمان ارسال
             const messagesQuery = query(
                 collection(db, messagesCollectionPath),
-                orderBy('timestamp', 'asc') // استفاده مجدد از orderBy برای ساختاردهی صحیح کوئری
+                orderBy('timestamp', 'asc') 
             );
             
             // گوش دادن به تغییرات در لحظه
@@ -231,16 +250,17 @@
                     messages.push({ id: doc.id, ...doc.data() });
                 });
 
-                // چون در کوئری از orderBy استفاده کردیم، دیگر نیازی به مرتب‌سازی در جاوا اسکریپت نیست.
-
                 renderMessages(messages);
             }, (error) => {
                 console.error("خطا در دریافت لحظه‌ای پیام‌ها:", error);
                 // نمایش خطای مجوز در صورت بروز مجدد
                 if (error.code === 'permission-denied') {
-                    messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا: مجوز دسترسی به پیام‌ها وجود ندارد. احتمالاً احراز هویت ناموفق بوده است. (Permission Denied)</p>`;
+                    const errorMessage = `خطای مجوز Firestore: ${error.message}`;
+                    messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا: مجوز دسترسی به پیام‌ها وجود ندارد.</p>`;
+                    displayGlobalError(errorMessage); // نمایش خطای دقیق Firestore
                 } else {
                     messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا در بارگذاری پیام‌ها: ${error.message}</p>`;
+                    displayGlobalError(`خطای عمومی Firestore: ${error.message}`); // نمایش خطای عمومی
                 }
             });
 
@@ -254,12 +274,12 @@
             const text = messageInput.value.trim();
 
             if (!text || !db || !userId) {
-                errorElement.textContent = 'برای ارسال پیام، اتصال برقرار و متن پیام باید وجود داشته باشد.';
-                errorElement.classList.remove('hidden');
+                formErrorElement.textContent = 'برای ارسال پیام، اتصال برقرار و متن پیام باید وجود داشته باشد.';
+                formErrorElement.classList.remove('hidden');
                 return;
             }
             
-            errorElement.classList.add('hidden');
+            formErrorElement.classList.add('hidden');
             sendButton.disabled = true;
 
             const newMessage = {
@@ -273,8 +293,10 @@
                 messageInput.value = ''; // خالی کردن فیلد
             } catch (error) {
                 console.error("خطا در ارسال پیام:", error);
-                errorElement.textContent = 'خطا در ارسال پیام. لطفاً دوباره تلاش کنید.';
-                errorElement.classList.remove('hidden');
+                const errorMessage = `خطا در ارسال پیام (Firestore): ${error.message}`;
+                formErrorElement.textContent = errorMessage;
+                formErrorElement.classList.remove('hidden');
+                displayGlobalError(errorMessage); // نمایش خطای دقیق ارسال
             } finally {
                 sendButton.disabled = false;
             }
