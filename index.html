@@ -89,6 +89,7 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; // توکن سفارشی مجدداً تعریف شد
 
         let db, auth, userId = null; 
+        let isListenerSetup = false; // پرچم جدید برای جلوگیری از شنونده‌های تکراری
         const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
 
         const messageInput = document.getElementById('message-input');
@@ -100,7 +101,7 @@
         const errorElement = document.getElementById('error-message');
         const statusBar = document.getElementById('status-bar');
 
-        // فعال کردن لاگ‌های دیباگ
+        // فعال کردن لاگ‌های دیباگ (برای رفع مشکلات مجوز)
         // setLogLevel('debug'); 
 
         // --- توابع کمکی ---
@@ -183,7 +184,11 @@
                         authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
                         statusBar.classList.remove('hidden');
                         sendButton.disabled = false;
-                        setupRealtimeListener(); // شروع گوش دادن به پیام‌ها
+                        
+                        // فقط در صورتی شنونده را راه‌اندازی کن که قبلاً انجام نشده باشد
+                        if (!isListenerSetup) {
+                            setupRealtimeListener(); 
+                        }
                     } else {
                         // احراز هویت ناموفق یا در حال انتظار
                         userId = null;
@@ -193,7 +198,6 @@
                 });
 
                 // 3. تلاش برای احراز هویت با توکن سفارشی (اولویت بالاتر) یا به صورت ناشناس
-                // این کار احتمال کسب مجوزهای لازم را افزایش می‌دهد.
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
@@ -207,12 +211,13 @@
         }
 
         function setupRealtimeListener() {
-            if (!db || !userId) return;
+            if (!db || !userId || isListenerSetup) return; // بازبینی پرچم
+            isListenerSetup = true; // تنظیم پرچم برای جلوگیری از اجرای تکراری
 
             // ساخت کوئری: گرفتن مجموعه پیام‌ها و مرتب‌سازی بر اساس زمان ارسال
             const messagesQuery = query(
                 collection(db, messagesCollectionPath),
-                // اجتناب از orderBy در فیلدی که ایندکس ندارد (مانند 'timestamp') و به جای آن در حافظه مرتب می‌کنیم.
+                orderBy('timestamp', 'asc') // استفاده مجدد از orderBy برای ساختاردهی صحیح کوئری
             );
             
             // گوش دادن به تغییرات در لحظه
@@ -226,12 +231,7 @@
                     messages.push({ id: doc.id, ...doc.data() });
                 });
 
-                // مرتب‌سازی در جاوا اسکریپت برای جلوگیری از خطای "index missing"
-                messages.sort((a, b) => {
-                    const timeA = a.timestamp && a.timestamp.seconds ? a.timestamp.seconds : 0;
-                    const timeB = b.timestamp && b.timestamp.seconds ? b.timestamp.seconds : 0;
-                    return timeA - timeB;
-                });
+                // چون در کوئری از orderBy استفاده کردیم، دیگر نیازی به مرتب‌سازی در جاوا اسکریپت نیست.
 
                 renderMessages(messages);
             }, (error) => {
