@@ -105,6 +105,7 @@
 
         let db, auth, userId = null; 
         let isListenerSetup = false; 
+        let isConfigValid = false; // متغیر سراسری جدید برای وضعیت پیکربندی
         const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
 
         const messageInput = document.getElementById('message-input');
@@ -198,17 +199,32 @@
                 
                 // بررسی اعتبار پیکربندی Firebase قبل از راه‌اندازی
                 const projectId = firebaseConfig.projectId;
-
-                // **تغییر کلیدی:** بررسی شدیدتر برای مقادیر نامعتبر از جمله رشته‌های خالی
-                if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') {
-                    // اگر این خطا رخ دهد، یعنی محیط کاری تنظیمات لازم را ارائه نکرده است.
-                    throw new Error("پیکربندی Firebase ناقص است. شناسه پروژه ('projectId') نامعتبر یا خالی است. این خطا به احتمال زیاد به دلیل عدم تنظیم صحیح متغیرهای محیطی توسط Canvas ایجاد شده و مانع از اتصال به پایگاه داده می‌شود.");
+                let usedFirebaseConfig = firebaseConfig;
+                
+                // **منطق بررسی پیکربندی:**
+                if (projectId && typeof projectId === 'string' && projectId.trim() !== '') {
+                    // پیکربندی معتبر است
+                    isConfigValid = true;
+                } else {
+                    // پیکربندی نامعتبر است
+                    const configError = "پیکربندی Firebase ناقص است. شناسه پروژه ('projectId') نامعتبر یا خالی است. این خطا به احتمال زیاد به دلیل عدم تنظیم صحیح متغیرهای محیطی توسط Canvas ایجاد شده و مانع از اتصال به پایگاه داده می‌شود.";
+                    console.error(configError);
+                    displayGlobalError(configError);
+                    
+                    // **راهکار جایگزین:** استفاده از پیکربندی خالی برای جلوگیری از خطای initializeApp
+                    usedFirebaseConfig = {}; 
                 }
 
                 // 1. راه‌اندازی برنامه و سرویس‌ها
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
+                const app = initializeApp(usedFirebaseConfig); // استفاده از پیکربندی معتبر یا جایگزین
                 auth = getAuth(app); 
+                
+                // Firestore را فقط در صورتی که پیکربندی معتبر باشد، مقداردهی می‌کنیم.
+                if (isConfigValid) {
+                    db = getFirestore(app);
+                } else {
+                    db = null; // db را به null تنظیم می‌کنیم تا عملیات‌های بعدی شکست بخورند
+                }
                 
                 // 2. تنظیم شنونده وضعیت احراز هویت
                 onAuthStateChanged(auth, (user) => {
@@ -216,20 +232,35 @@
                         // احراز هویت موفقیت‌آمیز است
                         userId = user.uid; // استفاده از شناسه واقعی Firebase
                         userIdDisplay.textContent = `شناسه کاربری: ${userId.substring(0, 8)}...`;
-                        authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
                         statusBar.classList.remove('hidden'); 
-                        sendButton.disabled = false;
                         globalErrorDiv.classList.add('hidden'); // پاک کردن خطای احراز هویت در صورت موفقیت
                         
-                        // فقط در صورتی شنونده را راه‌اندازی کن که قبلاً انجام نشده باشد
-                        if (!isListenerSetup) {
-                            setupRealtimeListener(); 
+                        if (isConfigValid) {
+                            // حالت نرمال: اتصال کامل
+                            authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
+                            sendButton.disabled = false;
+                            sendButton.textContent = 'ارسال پیام';
+                            formErrorElement.classList.add('hidden');
+
+                            if (!isListenerSetup) {
+                                setupRealtimeListener(); 
+                            }
+                        } else {
+                            // حالت degraded: احراز هویت موفق، اما Firestore غیرفعال است (به دلیل پیکربندی ناقص)
+                            authStatus.textContent = 'احراز هویت موفق؛ اتصال Firestore غیرفعال است.';
+                            sendButton.disabled = true; // دکمه ارسال را غیرفعال می‌کنیم
+                            sendButton.textContent = 'ارسال (غیرفعال)';
+                            messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">هشدار: اتصال به پایگاه داده (Firestore) به دلیل پیکربندی ناقص غیرفعال است. فقط احراز هویت کار می‌کند.</p>`;
+                            // نمایش پیام واضح‌تر در ناحیه فرم
+                            formErrorElement.textContent = 'پیام‌ها قابل ارسال نیستند. اتصال Firestore برقرار نشد.';
+                            formErrorElement.classList.remove('hidden');
                         }
                     } else {
                         // احراز هویت ناموفق یا در حال انتظار
                         userId = null;
                         authStatus.textContent = 'در حال تلاش برای احراز هویت...';
                         sendButton.disabled = true;
+                        sendButton.textContent = 'ارسال پیام';
                     }
                 });
 
@@ -292,8 +323,16 @@
             e.preventDefault();
             const text = messageInput.value.trim();
 
+            // بررسی مجدد پیکربندی قبل از تلاش برای استفاده از Firestore
+            if (!isConfigValid) {
+                formErrorElement.textContent = 'پیام‌ها قابل ارسال نیستند. اتصال Firestore برقرار نشد. (خطای محیطی)';
+                formErrorElement.classList.remove('hidden');
+                return;
+            }
+
             if (!text || !db || !userId) {
-                formErrorElement.textContent = 'برای ارسال پیام، اتصال برقرار و متن پیام باید وجود داشته باشد.';
+                // اگر isConfigValid درست باشد، این بلوک فقط خطای خالی بودن متن را مدیریت می‌کند
+                formErrorElement.textContent = 'متن پیام نمی‌تواند خالی باشد.';
                 formErrorElement.classList.remove('hidden');
                 return;
             }
@@ -308,6 +347,7 @@
             };
 
             try {
+                // این خط فقط در صورتی اجرا می‌شود که db مقداردهی شده باشد (یعنی isConfigValid درست باشد)
                 await addDoc(collection(db, messagesCollectionPath), newMessage);
                 messageInput.value = ''; // خالی کردن فیلد
             } catch (error) {
