@@ -91,7 +91,16 @@
 
         // تنظیمات عمومی Firebase (توسط محیط کاری فراهم می‌شود)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        
+        // اصلاح: اگر __firebase_config تعریف نشده باشد، یک رشته JSON خالی را در نظر بگیریم تا JSON.parse خطا ندهد.
+        const rawFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        let firebaseConfig = {};
+        try {
+             firebaseConfig = JSON.parse(rawFirebaseConfig);
+        } catch(e) {
+            console.error("Error parsing firebase config:", e);
+        }
+
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
         let db, auth, userId = null; 
@@ -188,9 +197,9 @@
                 authStatus.textContent = 'در حال راه‌اندازی Firebase...';
                 
                 // بررسی اعتبار پیکربندی Firebase قبل از راه‌اندازی
-                // اگر کانفیگ خالی باشد (مانند خطای قبلی)، یک خطای واضح‌تر نمایش داده شود.
-                if (!firebaseConfig || !firebaseConfig.projectId) {
-                    throw new Error("پیکربندی Firebase ناقص است. 'projectId' در داده‌های محیط کاری یافت نشد. این مشکل احتمالاً به دلیل عدم تنظیم متغیرهای محیطی است.");
+                // اگر projectId وجود نداشته باشد، یک خطای واضح‌تر نمایش داده شود.
+                if (!firebaseConfig.projectId) {
+                    throw new Error("پیکربندی Firebase ناقص است. شناسه پروژه ('projectId') در تنظیمات محیطی یافت نشد. این مشکل مانع از اتصال به پایگاه داده می‌شود.");
                 }
 
                 // 1. راه‌اندازی برنامه و سرویس‌ها
