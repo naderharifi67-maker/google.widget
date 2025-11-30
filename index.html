@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>چت خصوصی رمزگذاری شده</title>
+    <title>اتاق گفتگوی عمومی</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Font - Inter (برای متن انگلیسی) و فونت‌های فارسی مناسب -->
@@ -37,19 +37,19 @@
 
     <div id="app-container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl overflow-hidden">
         <header class="bg-blue-600 p-4 text-white text-center rounded-t-xl">
-            <h1 class="text-xl font-bold">گفتگوی رمزگذاری شده خصوصی</h1>
+            <h1 class="text-xl font-bold">اتاق گفتگوی عمومی</h1>
             <p id="auth-status" class="text-sm mt-1"></p>
         </header>
 
         <!-- بخش تنظیمات ورود -->
         <div id="setup-area" class="p-6 space-y-4">
             <h2 class="text-lg font-semibold text-gray-700">ورود به اتاق چت</h2>
-            <p class="text-sm text-red-600">
-                ⚠️ اخطار: پیام‌ها با کلید رمزی که اینجا وارد می‌کنید، رمزگذاری می‌شوند. اگر کلید رمز را گم کنید، دسترسی به پیام‌ها غیرممکن خواهد بود.
+            <p class="text-sm text-gray-500">
+                این یک اتاق گفتگوی عمومی است. هر کسی که نام اتاق (Room ID) مشترک را وارد کند، می‌تواند پیام‌ها را ببیند.
             </p>
             <div class="space-y-3">
-                <input type="text" id="roomId" placeholder="نام اتاق (Room ID) - باید مشترک باشد" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" value="secret-chat-123">
-                <input type="password" id="secretKey" placeholder="کلید رمز (Secret Key) - باید مشترک باشد" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                <input type="text" id="roomId" placeholder="نام اتاق (Room ID) - باید مشترک باشد" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" value="public-chat-123">
+                <!-- کلید رمز حذف شد -->
                 <button onclick="connectToChat()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition duration-200 shadow-md">
                     ورود و اتصال
                 </button>
@@ -88,18 +88,17 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         // تعریف یک تنظیمات پیش‌فرض معتبر برای فایربیس در صورت عدم وجود تنظیمات محیطی
-        const defaultFirebaseConfig = { projectId: 'default-secret-chat-project' };
+        const defaultFirebaseConfig = { projectId: 'default-public-chat-project' };
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' && __firebase_config.length > 2 ? __firebase_config : JSON.stringify(defaultFirebaseConfig));
         
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
         let currentUserId = null;
-        let encryptionKey = null;
         let unsubscribeFromChat = null;
         let currentRoomId = null;
 
-        // --- توابع کمکی رمزنگاری (Encryption/Decryption Utilities) ---
+        // --- توابع کمکی (Utilities) ---
         
         /**
          * نمایش پیام وضعیت/خطا
@@ -120,129 +119,6 @@
                 statusDiv.classList.add('bg-yellow-100', 'text-yellow-700', 'border-yellow-300');
             }
             statusDiv.style.display = 'block';
-        }
-
-        /**
-         * تبدیل رشته به ArrayBuffer
-         * @param {string} str
-         * @returns {ArrayBuffer}
-         */
-        function str2ab(str) {
-            const buf = new ArrayBuffer(str.length);
-            const bufView = new Uint8Array(buf);
-            for (let i = 0, strLen = str.length; i < strLen; i++) {
-                bufView[i] = str.charCodeAt(i);
-            }
-            return buf;
-        }
-
-        /**
-         * تبدیل ArrayBuffer به رشته Base64
-         * @param {ArrayBuffer} buffer
-         * @returns {string}
-         */
-        function ab2base64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return btoa(binary);
-        }
-
-        /**
-         * تبدیل رشته Base64 به ArrayBuffer
-         * @param {string} base64
-         * @returns {ArrayBuffer}
-         */
-        function base642ab(base64) {
-            const binary_string = atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        /**
-         * استخراج کلید رمزگذاری از رمز عبور (PBKDF2)
-         * @param {string} password - کلید رمز وارد شده توسط کاربر
-         * @returns {Promise<CryptoKey>} - کلید AES برای رمزگذاری
-         */
-        async function deriveKey(password) {
-            // Salt (باید برای همه کاربران یکسان باشد تا بتوانند رمزگشایی کنند)
-            // در یک محیط واقعی، بهتر است از Salt منحصر به فرد برای هر پیام یا کاربر استفاده شود، اما برای سادگی چت مشترک، از Salt ثابت استفاده می‌کنیم.
-            const salt = str2ab("my-secret-chat-salt");
-            const keyMaterial = await crypto.subtle.importKey(
-                "raw",
-                str2ab(password),
-                { name: "PBKDF2" },
-                false,
-                ["deriveKey"]
-            );
-            return crypto.subtle.deriveKey(
-                {
-                    name: "PBKDF2",
-                    salt: salt,
-                    iterations: 100000,
-                    hash: "SHA-256",
-                },
-                keyMaterial,
-                { name: "AES-GCM", length: 256 },
-                true,
-                ["encrypt", "decrypt"]
-            );
-        }
-
-        /**
-         * رمزگذاری یک پیام متنی
-         * @param {string} plaintext - متن پیام
-         * @param {CryptoKey} key - کلید رمزگذاری
-         * @returns {Promise<{cipher: string, iv: string}>} - آبجکتی شامل متن رمزگذاری شده (Base64) و IV (Base64)
-         */
-        async function encryptMessage(plaintext, key) {
-            const iv = crypto.getRandomValues(new Uint8Array(12)); // IV 12-byte برای AES-GCM
-            const encoded = new TextEncoder().encode(plaintext);
-            
-            const ciphertext = await crypto.subtle.encrypt(
-                {
-                    name: "AES-GCM",
-                    iv: iv
-                },
-                key,
-                encoded
-            );
-            
-            return {
-                cipher: ab2base64(ciphertext),
-                iv: ab2base64(iv.buffer)
-            };
-        }
-
-        /**
-         * رمزگشایی یک پیام رمزگذاری شده
-         * @param {string} cipher - متن رمزگذاری شده (Base64)
-         * @param {string} iv - بردار اولیه (Base64)
-         * @param {CryptoKey} key - کلید رمزگذاری
-         * @returns {Promise<string|null>} - متن رمزگشایی شده یا null در صورت خطا
-         */
-        async function decryptMessage(cipher, iv, key) {
-            try {
-                const decrypted = await crypto.subtle.decrypt(
-                    {
-                        name: "AES-GCM",
-                        iv: new Uint8Array(base642ab(iv))
-                    },
-                    key,
-                    base642ab(cipher)
-                );
-                return new TextDecoder().decode(decrypted);
-            } catch (e) {
-                console.error("Decryption failed:", e);
-                return null; // رمزگشایی ناموفق (معمولاً به دلیل کلید اشتباه)
-            }
         }
         
         // --- توابع اصلی Firebase و منطق چت ---
@@ -293,27 +169,19 @@
          */
         window.connectToChat = async function() {
             const roomId = document.getElementById('roomId').value.trim();
-            const secretKey = document.getElementById('secretKey').value;
 
-            if (!roomId || !secretKey) {
-                showStatus("لطفاً نام اتاق و کلید رمز را وارد کنید.", 'info');
+            if (!roomId) {
+                showStatus("لطفاً نام اتاق را وارد کنید.", 'info');
                 return;
             }
             
-            // 1. استخراج کلید رمزگذاری از رمز عبور
-            try {
-                encryptionKey = await deriveKey(secretKey);
-                currentRoomId = roomId;
-            } catch (e) {
-                showStatus("خطا در تولید کلید رمزگذاری.", 'error');
-                console.error("Key derivation error:", e);
-                return;
-            }
+            // ذخیره نام اتاق
+            currentRoomId = roomId;
 
             // 2. تغییر حالت UI
             document.getElementById('setup-area').classList.add('hidden');
             document.getElementById('chat-area').classList.remove('hidden');
-            showStatus("اتصال به اتاق " + roomId + " برقرار شد. پیام‌ها رمزگذاری شده‌اند.", 'success');
+            showStatus("اتصال به اتاق " + roomId + " برقرار شد. چت عمومی است.", 'success');
             
             // 3. شروع شنونده پیام‌ها (اگر احراز هویت کامل شده باشد)
             if (currentUserId) {
@@ -330,8 +198,8 @@
                 unsubscribeFromChat(); // قطع اتصال قبلی اگر وجود داشت
             }
             
-            // مسیر کالکشن باید بر اساس appId و roomId باشد
-            const messagesRef = collection(db, `/artifacts/${appId}/public/data/secret_chats/${roomId}/messages`);
+            // مسیر کالکشن برای چت عمومی
+            const messagesRef = collection(db, `/artifacts/${appId}/public/data/public_chats/${roomId}/messages`);
             const q = query(messagesRef, orderBy("timestamp", "desc")); // گرفتن جدیدترین پیام‌ها ابتدا
             
             // onSnapshot برای دریافت لحظه‌ای تغییرات
@@ -350,20 +218,10 @@
                     const bubble = document.createElement('div');
                     bubble.className = 'p-3 text-sm break-words shadow-md ' + (isSelf ? 'chat-bubble-self' : 'chat-bubble-other');
                     
-                    // تلاش برای رمزگشایی
-                    if (data.cipher && data.iv && encryptionKey) {
-                        const decryptedText = await decryptMessage(data.cipher, data.iv, encryptionKey);
-                        if (decryptedText) {
-                            bubble.textContent = decryptedText;
-                        } else {
-                            bubble.textContent = '❌ پیام قابل رمزگشایی نیست. (کلید رمز اشتباه است)';
-                            bubble.classList.add('bg-red-400');
-                        }
-                    } else {
-                         // در صورت عدم وجود داده‌های رمزنگاری (نباید اتفاق بیفتد)
-                        bubble.textContent = 'پیام نامعتبر';
-                    }
-
+                    // نمایش پیام به صورت متن ساده
+                    const messageText = data.text || 'پیام نامعتبر';
+                    bubble.textContent = messageText;
+                    
                     // اضافه کردن زمان (اختیاری)
                     const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : '...';
                     const timeSpan = document.createElement('span');
@@ -381,28 +239,24 @@
         }
 
         /**
-         * ارسال پیام رمزگذاری شده
+         * ارسال پیام به صورت متن ساده
          */
         window.sendMessage = async function() {
             const messageInput = document.getElementById('messageInput');
             const plaintext = messageInput.value.trim();
 
-            if (!plaintext || !currentRoomId || !currentUserId || !encryptionKey) {
+            if (!plaintext || !currentRoomId || !currentUserId) {
                 return;
             }
 
             try {
-                // 1. رمزگذاری پیام
-                const encryptedData = await encryptMessage(plaintext, encryptionKey);
+                // ساخت مرجع کالکشن جدید برای چت عمومی
+                const messagesRef = collection(db, `/artifacts/${appId}/public/data/public_chats/${currentRoomId}/messages`);
                 
-                // 2. ساخت مرجع کالکشن
-                const messagesRef = collection(db, `/artifacts/${appId}/public/data/secret_chats/${currentRoomId}/messages`);
-                
-                // 3. ارسال به فایربیس
+                // ارسال به فایربیس
                 await addDoc(messagesRef, {
                     userId: currentUserId,
-                    cipher: encryptedData.cipher, // پیام رمزگذاری شده
-                    iv: encryptedData.iv,         // Initialization Vector
+                    text: plaintext, // ذخیره پیام به صورت متن ساده
                     timestamp: serverTimestamp()  // مهر زمانی سرور
                 });
                 
@@ -410,7 +264,7 @@
                 messageInput.focus();
             } catch (e) {
                 console.error("خطا در ارسال پیام:", e);
-                showStatus("خطا در ارسال پیام. شاید مشکل از کلید رمز باشد.", 'error');
+                showStatus("خطا در ارسال پیام.", 'error');
             }
         }
 
