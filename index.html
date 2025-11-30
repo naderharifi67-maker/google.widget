@@ -3,467 +3,710 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>گفتگوی با ورود مخفی</title>
-    <!-- Tailwind CSS CDN -->
+    <title>ماشین حساب تعرفه‌های نقشه‌برداری با قابلیت فاکتور شفاف</title>
+    <!-- بارگذاری Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // توجه: orderBy از اینجا حذف شد و مرتب‌سازی در حافظه انجام می‌شود
-        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- GLOBAL FIREBASE VARIABLES (MANDATORY INJECTION) ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        let firebaseConfig = {};
-        try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                firebaseConfig = JSON.parse(__firebase_config);
-            }
-        } catch (e) {
-            console.error("Failed to parse __firebase_config:", e);
-        }
-        
-        // اگر پیکربندی لازم فراهم نشده باشد، از یک پیکربندی ساختگی (Mock) استفاده می‌کنیم
-        if (!firebaseConfig.projectId) {
-            console.warn("No valid Firebase config provided. Using a mock configuration.");
-            firebaseConfig = {
-                apiKey: "mock-key",
-                authDomain: "mock-domain.firebaseapp.com",
-                projectId: "mock-project-id" 
-            };
-        }
-        
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        // DOM elements
-        const secretEntryScreen = document.getElementById('secretEntryScreen');
-        const chatScreen = document.getElementById('chatScreen');
-        const magicLine = document.getElementById('magicLine'); // خط قابل کلیک جدید
-        const messageInput = document.getElementById('messageInput');
-        const sendMessageButton = document.getElementById('sendMessageButton');
-        const messagesContainer = document.getElementById('messagesContainer');
-        const roomNameDisplay = document.getElementById('roomNameDisplay');
-        const userIdDisplay = document.getElementById('userIdDisplay');
-        const statusMessage = document.getElementById('statusMessage');
-        const goBackButton = document.getElementById('goBackButton'); 
-        
-        // متغیرهای فایربیس با let تعریف می‌شوند
-        let app = null;
-        let db = null;
-        let auth = null;
-        let currentUserId = null;
-        let unsubscribe = null; 
-        
-        // متغیرهای کلیک مخفی
-        let clickCount = 0;
-        let clickTimeout = null;
-        const REQUIRED_CLICKS = 3;
-        const CLICK_TIMEOUT_MS = 500; // حداکثر زمان بین کلیک‌ها
-
-        // ثابت برای شناسه اتاق (به جای کلمه رمز)
-        const FIXED_CHAT_ROOM_ID = "public_secret_entry_chat_room";
-        const ROOM_NAME = "گفتگوی عمومی (ورود سریع)";
-
-
-        // فعال‌سازی لاگ دیباگ فایربیس
-        setLogLevel('debug');
-
-        // Initialize Firebase
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        
-
-        // Helper function for exponential backoff retry logic
-        const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
-            if (firebaseConfig.projectId === "mock-project-id" || !db || !auth) {
-                 if (fn.name.includes('signIn')) {
-                    return { user: { uid: 'MOCK_USER_' + crypto.randomUUID() } };
-                 } else {
-                     console.error("Firebase services are mocked or not initialized. Firestore operation skipped.");
-                     throw new Error("MOCK_FIRESTORE_ACCESS_DENIED");
-                 }
-            }
-
-            for (let i = 0; i < retries; i++) {
-                try {
-                    return await fn();
-                } catch (error) {
-                    if (i === retries - 1) throw error;
-                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
-                }
-            }
-        };
-
-        // تابع مدیریت احراز هویت
-        const handleAuth = async () => {
-            if (!auth) return; 
-            
-            statusMessage.textContent = "در حال اتصال و احراز هویت ناشناس...";
-            statusMessage.classList.remove('text-green-400', 'text-red-400', 'font-bold', 'text-orange-400');
-            statusMessage.classList.add('text-yellow-400');
-
-            try {
-                let userCredential;
-                if (initialAuthToken) {
-                    userCredential = await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
-                } else {
-                    userCredential = await fetchWithRetry(() => signInAnonymously(auth));
-                }
-                
-                if (userCredential && userCredential.user && userCredential.user.uid.startsWith('MOCK_USER_')) {
-                    // حالت ساختگی
-                    const mockUser = userCredential.user;
-                    currentUserId = mockUser.uid;
-                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId} (تستی)`;
-                    statusMessage.textContent = "حالت تستی فعال: آماده ورود مخفی";
-                    statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
-                    statusMessage.classList.add('text-orange-400', 'font-bold'); 
-                    initializeEventListeners();
-                }
-            } catch (error) {
-                if (error.message === "MOCK_FIRESTORE_ACCESS_DENIED") return;
-
-                console.error("Authentication failed after retries:", error);
-                statusMessage.textContent = "خطا در احراز هویت. (کنسول را برای جزئیات خطا بررسی کنید)";
-                statusMessage.classList.remove('text-yellow-400', 'text-orange-400');
-                statusMessage.classList.add('text-red-400', 'font-bold');
-            }
-        };
-
-
-        // 1. Authentication Setup Listener
-        if (auth) { 
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    currentUserId = user.uid;
-                    // اگر کاربر واقعی است، پیام موفقیت‌آمیز را نمایش بده
-                    if (!user.uid.startsWith('MOCK_USER_')) {
-                         userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
-                        
-                         statusMessage.textContent = "متصل: آماده ورود مخفی";
-                         statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold', 'text-orange-400');
-                         statusMessage.classList.add('text-green-400');
-                         initializeEventListeners();
-                    }
-                } else {
-                    // اگر کاربر لاگین نیست، فرآیند لاگین را شروع کن.
-                    if (!currentUserId) {
-                       handleAuth();
-                    }
-                }
-            });
-        }
-        
-        // 2. Main Application Logic
-        const initializeEventListeners = () => {
-            // مطمئن شوید event listeners فقط یک بار اضافه می شوند
-            if (magicLine.hasAttribute('data-listeners-attached')) return;
-            
-            magicLine.addEventListener('click', handleThreeClickEntry);
-            sendMessageButton.addEventListener('click', handleSendMessage);
-            messageInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleSendMessage();
-            });
-            goBackButton.addEventListener('click', handleGoBack); 
-            
-            magicLine.setAttribute('data-listeners-attached', 'true');
-        };
-
-        // --- NEW: Three-Click Entry Logic ---
-        const handleThreeClickEntry = () => {
-            if (!currentUserId) {
-                alertUser("خطا: احراز هویت هنوز کامل نشده است. لطفاً چند لحظه صبر کنید.");
-                return;
-            }
-
-            clickCount++;
-            magicLine.textContent = `کلیک شد! (${clickCount}/${REQUIRED_CLICKS}). سریع کلیک کنید...`;
-            magicLine.classList.add('animate-pulse');
-
-            if (clickCount === REQUIRED_CLICKS) {
-                clearTimeout(clickTimeout);
-                magicLine.textContent = `ورود مخفی انجام شد!`;
-                magicLine.classList.remove('animate-pulse');
-                magicLine.classList.add('text-green-400');
-                
-                // انتقال به صفحه چت
-                setTimeout(() => {
-                    handleEnterChat();
-                }, 300);
-
-            } else {
-                // ریست کردن شمارنده اگر کلیک‌های بعدی خیلی دیر انجام شوند
-                clearTimeout(clickTimeout);
-                clickTimeout = setTimeout(() => {
-                    clickCount = 0;
-                    magicLine.textContent = "روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.";
-                    magicLine.classList.remove('animate-pulse', 'text-green-400');
-                }, CLICK_TIMEOUT_MS);
-            }
-        }
-        // --- END: Three-Click Entry Logic ---
-
-        const handleGoBack = () => {
-            if (unsubscribe) {
-                unsubscribe(); // توقف گوش دادن به چت قبلی
-            }
-            chatScreen.classList.add('hidden');
-            secretEntryScreen.classList.remove('hidden');
-            magicLine.focus();
-            
-            // Reset click state
-            clickCount = 0;
-            clearTimeout(clickTimeout);
-            magicLine.textContent = "روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.";
-            magicLine.classList.remove('animate-pulse', 'text-green-400');
-        };
-
-
-        const handleEnterChat = () => {
-            // اگر در حالت Mock هستیم، دسترسی به دیتابیس ممکن است منجر به خطا شود.
-            if (firebaseConfig.projectId === "mock-project-id" || !db) {
-                alertUser("خطای دیتابیس: اتصال به سرور فایربیس برقرار نیست. لطفا برای حالت آنلاین، پیکربندی Canvas را بررسی کنید.");
-                return;
-            }
-
-            if (!currentUserId) {
-                 alertUser("خطا: اتصال به سرور هنوز کامل نشده است. لطفا چند لحظه صبر کنید.");
-                 return;
-            }
-
-            // Unsubscribe from any previous listener if switching rooms
-            if (unsubscribe) {
-                unsubscribe();
-            }
-
-            const chatRoomId = FIXED_CHAT_ROOM_ID;
-            
-            // Public Path: /artifacts/{appId}/public/data/secret_chats/{chatRoomId}/messages
-            const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
-            const chatCollectionRef = collection(db, chatCollectionPath);
-
-            // 3. Start listening for messages (onSnapshot)
-            const messagesQuery = query(chatCollectionRef); 
-
-            unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-                messagesContainer.innerHTML = ''; // Clear existing messages
-                
-                let messages = [];
-                snapshot.forEach((doc) => {
-                    messages.push(doc.data());
-                });
-
-                // مرتب‌سازی در حافظه بر اساس timestamp (صعودی)
-                messages.sort((a, b) => {
-                    const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : 0;
-                    const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : 0;
-                    return timeA - timeB;
-                });
-                
-                // نمایش پیام‌های مرتب‌شده
-                messages.forEach((data) => {
-                    displayMessage(data);
-                });
-
-                // Scroll to the latest message
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, (error) => {
-                console.error("Error listening to messages: ", error);
-                // این خطا اغلب به دلیل عدم مجوز فایربیس است
-                alertUser("خطا در بارگذاری پیام‌ها. (احتمالاً مشکل مجوز دسترسی). برای رفع این مشکل، لطفاً قوانین امنیتی Firestore را برای مسیر public/data/secret_chats/ به گونه‌ای تنظیم کنید که allow read, write: if request.auth != null; باشد.");
-            });
-
-            // Update UI
-            roomNameDisplay.textContent = ROOM_NAME;
-            secretEntryScreen.classList.add('hidden');
-            chatScreen.classList.remove('hidden');
-            messageInput.focus();
-        };
-
-        const handleSendMessage = async () => {
-            // اگر در حالت Mock هستیم، اجازه ارسال پیام نداریم
-            if (firebaseConfig.projectId === "mock-project-id" || !db) {
-                alertUser("در حالت تستی/آفلاین، امکان ارسال پیام به دیتابیس وجود ندارد.");
-                return;
-            }
-
-            const messageText = messageInput.value.trim();
-
-            if (!messageText || !currentUserId) return;
-
-            const chatRoomId = FIXED_CHAT_ROOM_ID;
-            const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
-            const chatCollectionRef = collection(db, chatCollectionPath);
-            
-            const message = {
-                text: messageText,
-                senderId: currentUserId,
-                timestamp: serverTimestamp()
-            };
-
-            try {
-                // Add the new message to Firestore
-                await fetchWithRetry(() => addDoc(chatCollectionRef, message));
-                messageInput.value = ''; // Clear input
-            } catch (error) {
-                console.error("Error sending message: ", error);
-                alertUser("خطا در ارسال پیام. لطفاً دوباره امتحان کنید.");
-            }
-        };
-
-        const displayMessage = (data) => {
-            const isMine = data.senderId === currentUserId;
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('flex', 'mb-4', isMine ? 'justify-end' : 'justify-start');
-
-            // Determine display name: "شما" (You) or a short ID for the friend
-            const senderName = isMine ? 'شما' : `دوست (${data.senderId.substring(0, 4)}...)`;
-            const senderColor = isMine ? 'bg-indigo-600' : 'bg-gray-700';
-            const textColor = 'text-white';
-            const bubbleClasses = isMine ? 'rounded-tl-xl rounded-bl-xl rounded-br-xl' : 'rounded-tr-xl rounded-bl-xl rounded-br-xl';
-            
-            // Format timestamp for display (if available)
-            let timeStr = '';
-            // بررسی می‌کنیم که آیا timestamp یک شیء Timestamp از فایربیس است که متد toDate را دارد
-            if (data.timestamp && data.timestamp.toDate) {
-                const date = data.timestamp.toDate();
-                timeStr = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-            }
-
-            messageElement.innerHTML = `
-                <div class="max-w-xs sm:max-w-md lg:max-w-lg">
-                    <!-- Sender Name -->
-                    <div class="text-xs ${isMine ? 'text-left' : 'text-right'} mb-1 text-gray-400 font-medium">
-                        ${senderName}
-                    </div>
-                    <!-- Message Bubble -->
-                    <div class="${senderColor} ${textColor} ${bubbleClasses} p-3 shadow-lg break-words text-base leading-relaxed">
-                        ${data.text}
-                    </div>
-                    <!-- Timestamp -->
-                    <div class="text-xs mt-1 ${isMine ? 'text-right' : 'text-left'} text-gray-500">
-                        ${timeStr}
-                    </div>
-                </div>
-            `;
-            messagesContainer.appendChild(messageElement);
-        };
-
-        // Custom Modal for Alerts (replacing built-in alert)
-        const alertUser = (message) => {
-            const modal = document.getElementById('customAlertModal');
-            const alertMessage = document.getElementById('alertMessage');
-            const closeButton = document.getElementById('closeAlertButton');
-
-            alertMessage.textContent = message;
-            modal.classList.remove('hidden');
-
-            closeButton.onclick = () => {
-                modal.classList.add('hidden');
-            };
-            // Close on click outside
-            modal.onclick = (e) => {
-                if (e.target === modal) {
-                    modal.classList.add('hidden');
-                }
-            };
-        };
-
-    </script>
     <style>
-        /* Custom scrollbar for chat container */
-        #messagesContainer::-webkit-scrollbar {
-            width: 8px;
-        }
-        #messagesContainer::-webkit-scrollbar-thumb {
-            background-color: #4a5568; /* dark gray */
-            border-radius: 4px;
-        }
-        #messagesContainer::-webkit-scrollbar-track {
-            background-color: #2d3748; /* darker background */
-        }
-        /* Ensure font is readable, especially for Persian */
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap');
         body {
-            /* تنظیم فونت برای خوانایی بهتر در زبان فارسی روی دستگاه‌های مختلف */
-            font-family: Tahoma, "Segoe UI", 'Inter', "Noto Sans Arabic", sans-serif;
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #f8fafc;
+            min-height: 100vh;
         }
-        #magicLine:hover {
-            cursor: pointer;
-            text-shadow: 0 0 5px rgba(129, 140, 248, 0.5); /* glow effect */
+        .card {
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+            background-color: white;
+            border: 1px solid #e2e8f0;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* سبک‌های مخصوص فاکتور برای پرینت */
+        .invoice-content {
+            background-color: white;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 2rem auto;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .invoice-table th, .invoice-table td {
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            text-align: right;
+        }
+        .invoice-table th {
+            background-color: #f3f4f6;
+            font-weight: 700;
+        }
+        .detail-table th, .detail-table td {
+            padding: 8px;
+            border: none;
+            text-align: right;
+        }
+        /* مخفی کردن دکمه‌ها در پرینت */
+        @media print {
+            .print\:hidden {
+                display: none !important;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
+<body class="p-4 flex items-center justify-center">
 
-    <!-- Custom Alert Modal (Replaces alert()) -->
-    <div id="customAlertModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center border border-red-500/50">
-            <p id="alertMessage" class="text-red-300 mb-4 text-lg"></p>
-            <button id="closeAlertButton" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition duration-200">
-                باشه
+    <div class="card w-full max-w-xl mx-auto p-6 md:p-8 rounded-2xl space-y-6">
+        <!-- عنوان -->
+        <header class="text-center space-y-2 pb-4 border-b border-gray-200 print:hidden">
+            <h1 class="text-2xl font-black text-slate-800">مدیریت قیمت خدمات نقشه‌برداری</h1>
+            <p class="text-sm text-gray-500">محاسبه با در نظر گرفتن نوع ملک، سختی کار، هزینه واحدهای تجاری و تخفیف.</p>
+        </header>
+
+        <!-- بخش اطلاعات متقاضی (جدید) -->
+        <section class="space-y-3 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+            <h2 class="text-lg font-bold text-yellow-700">۱. اطلاعات متقاضی:</h2>
+            <input type="text" id="applicantName" placeholder="نام و نام خانوادگی متقاضی"
+                   class="w-full px-4 py-2 border border-yellow-300 rounded-lg text-base focus:ring-yellow-500 focus:border-yellow-500">
+            <input type="text" id="applicantPhone" placeholder="شماره تماس متقاضی"
+                   class="w-full px-4 py-2 border border-yellow-300 rounded-lg text-base text-left focus:ring-yellow-500 focus:border-yellow-500">
+        </section>
+
+        <!-- بخش اطلاعات دفتر مهندسی -->
+        <section class="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <h2 class="text-lg font-bold text-blue-700">۲. مشخصات دفتر مهندسی:</h2>
+            <input type="text" id="officeName" placeholder="نام دفتر مهندسی" value="دفتر فنی مهندسی"
+                   class="w-full px-4 py-2 border border-blue-300 rounded-lg text-base focus:ring-blue-500 focus:border-blue-500">
+            <input type="text" id="officeAddress" placeholder="آدرس دفتر" value="تهران، خیابان ولیعصر"
+                   class="w-full px-4 py-2 border border-blue-300 rounded-lg text-base focus:ring-blue-500 focus:border-blue-500">
+            <input type="text" id="officePhone" placeholder="شماره تماس دفتر" value="۰۲۱-۱۲۳۴۵۶۷۸"
+                   class="w-full px-4 py-2 border border-blue-300 rounded-lg text-base text-left focus:ring-blue-500 focus:border-blue-500">
+        </section>
+
+        <main class="space-y-6">
+            <!-- ۳. انتخاب نوع نقشه -->
+            <div>
+                <label for="serviceType" class="block text-base font-semibold text-gray-700 mb-2">۳. نوع خدمت نقشه‌برداری:</label>
+                <select id="serviceType" onchange="togglePropertyTypeSelector(); calculateCost()"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-base focus:ring-sky-500 focus:border-sky-500 transition duration-150">
+                    <option value="kroki">نقشه کروکی</option>
+                    <option value="utm_gov">نقشه UTM دولتی</option>
+                    <option value="utm_free">نقشه UTM آزاد</option>
+                    <option value="asbuilt">نقشه تک خطی (تفکیکی)</option>
+                </select>
+            </div>
+
+            <!-- ۳.۵. انتخاب نوع ملک (فقط برای UTM) -->
+            <div id="propertyTypeSelector" class="hidden space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <label for="propertyType" class="block text-sm font-semibold text-gray-700">نوع ملک (کاربری):</label>
+                <select id="propertyType" onchange="calculateCost()"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-base focus:ring-sky-500 focus:border-sky-500 transition duration-150">
+                    <!-- گزینه‌ها به صورت پویا توسط JS پر می‌شوند -->
+                </select>
+                <p id="propertyTypeNote" class="text-xs text-red-500 mt-1">**توجه:** تعرفه‌ها بر اساس داده‌های موجود محاسبه می‌شوند.</p>
+            </div>
+
+            <!-- ۴. ورودی متراژ -->
+            <div>
+                <label id="areaLabel" for="areaInput" class="block text-base font-semibold text-gray-700 mb-2">۴. متراژ ملک (متر مربع):</label>
+                <input type="number" id="areaInput" placeholder="مثلاً: 350" min="1"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-base text-left focus:ring-sky-500 focus:border-sky-500 transition duration-150"
+                       oninput="calculateCost()">
+                <!-- تبصره برای نقشه تک خطی (تفکیکی) -->
+                <p id="asbuiltAreaNote" class="hidden text-xs text-gray-500 mt-1 p-2 bg-yellow-50/50 rounded-lg border border-yellow-100">
+                    تبصره: جهت محاسبه هزینه مساحت کل اعیانی‌های طبقات رویی و زیرزمین به تعرفه صفر قبل از $۸۰۰$ مترمربع $۸۰۰,۰۰۰$ تومان مبلغ اضافه می‌گردد.
+                </p>
+            </div>
+
+            <!-- ۴.۵. ورودی تعداد واحدهای تجاری (فقط برای نقشه تک خطی) -->
+            <div id="commercialUnitsSelector" class="hidden">
+                <label for="commercialUnitsInput" class="block text-base font-semibold text-gray-700 mb-2">۵. تعداد واحدهای تجاری:</label>
+                <input type="number" id="commercialUnitsInput" placeholder="مثلاً: 2" min="0" value="0"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-base text-left focus:ring-sky-500 focus:border-sky-500 transition duration-150"
+                       oninput="calculateCost()">
+                <p class="text-xs text-gray-500 mt-1">هزینه به ازای هر واحد تجاری $۴۵۰,۰۰۰$ تومان محاسبه می‌شود.</p>
+            </div>
+            
+            <!-- ۵. انتخاب ضریب سختی کار -->
+            <div>
+                <label for="difficultyFactor" class="block text-base font-semibold text-gray-700 mb-2">۶. ضریب سختی کار:</label>
+                <select id="difficultyFactor" onchange="calculateCost()"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-base focus:ring-sky-500 focus:border-sky-500 transition duration-150">
+                    <option value="1.0">آسان (ضریب ۱.۰)</option>
+                    <option value="1.2">متوسط (ضریب ۱.۲)</option>
+                    <option value="1.5">سخت (ضریب ۱.۵)</option>
+                    <option value="1.8">بسیار سخت (ضریب ۱.۸)</option>
+                </select>
+            </div>
+
+            <!-- ۶. انتخاب میزان تخفیف -->
+            <div>
+                <label for="discountRate" class="block text-base font-semibold text-gray-700 mb-2">۷. تخفیف (%): <span id="discountValue" class="font-bold text-red-600">۰%</span></label>
+                <input type="range" id="discountRate" min="0" max="15" step="1" value="0"
+                       oninput="updateDiscountText(); calculateCost();"
+                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg">
+            </div>
+        </main>
+
+        <!-- نمایش تعرفه مربوطه -->
+        <div id="tariffImageContainer" class="p-4 mt-4 bg-gray-50 rounded-2xl border border-gray-200 hidden print:hidden">
+            <p class="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-300 pb-2">تعرفه مورد استفاده برای محاسبه:</p>
+            <img id="tariffImage" src="" alt="عکس تعرفه" class="w-full h-auto rounded-lg shadow-md" onerror="this.onerror=null; this.src='https://placehold.co/600x400/FFCC00/000?text=تصویر+تعرفه+موجود+نیست';">
+        </div>
+
+        <!-- نمایش نتیجه نهایی و دکمه صدور فاکتور -->
+        <div class="space-y-4">
+            <div id="result" class="p-6 rounded-2xl bg-sky-100 border-2 border-sky-300 transition-all duration-300 ease-in-out">
+                <div class="flex justify-between items-center mb-3 border-b border-sky-200 pb-2">
+                    <p class="text-xl font-bold text-slate-800">هزینه نهایی (با تخفیف):</p>
+                    <p id="finalCostDisplay" class="text-3xl font-extrabold text-sky-700">۰ تومان</p>
+                </div>
+                <p id="baseCostDetail" class="text-sm text-gray-600">هزینه پایه محاسبه شده: ۰ تومان</p>
+                <p id="commercialCostDetail" class="text-sm text-amber-700 hidden">هزینه واحدهای تجاری: ۰ تومان</p>
+                <p id="complexityDetail" class="text-sm text-gray-600">ضریب سختی اعمال شده: ۱.۰</p>
+                <p id="discountDetail" class="text-sm text-red-600">میزان تخفیف: ۰%</p>
+            </div>
+            
+            <button onclick="generateInvoice()"
+                    class="w-full py-3 bg-green-600 text-white text-lg font-bold rounded-xl hover:bg-green-700 transition duration-150 shadow-lg shadow-green-500/50 print:hidden">
+                صدور فاکتور رسمی
             </button>
         </div>
     </div>
 
-    <!-- Main Application Container -->
-    <div class="w-full max-w-3xl h-[90vh] flex flex-col bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
-
-        <!-- Status/User ID Display -->
-        <div class="p-3 bg-gray-700 text-xs text-center border-b border-gray-600">
-            <span id="userIdDisplay" class="text-gray-400">در حال اتصال...</span>
-            <span id="statusMessage" class="text-yellow-400">در حال احراز هویت...</span>
-        </div>
-
-        <!-- 1. Secret Entry Screen -->
-        <div id="secretEntryScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
-            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">گفتگوی عمومی (ورود سریع)</h1>
-            <p class="mb-8 text-gray-400">برای ورود، نیازی به کلمه رمز نیست. فقط یک حرکت سریع لازم است...</p>
-            
-            <div class="w-full max-w-sm">
-                <!-- NEW: Clickable line for secret entry -->
-                <p id="magicLine" class="text-xl font-mono text-indigo-400 p-4 border border-indigo-500 rounded-lg transition duration-150 hover:bg-gray-700 select-none">
-                    روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.
-                </p>
-                <!-- END NEW -->
-            </div>
-            
-            <p class="mt-8 text-sm text-gray-500">این اتاق چت عمومی است و همه کاربران می‌توانند وارد شوند.</p>
-            <p class="mt-2 text-xs text-red-400/80">اگر پس از ورود، پیام‌ها بارگیری نشدند، لطفاً قوانین امنیتی Firestore را برای مسیر public/data/secret_chats/ به گونه‌ای تنظیم کنید که allow read, write: if request.auth != null; باشد.</p>
-        </div>
-
-        <!-- 2. Chat Screen -->
-        <div id="chatScreen" class="flex-grow flex flex-col hidden">
-            
-            <!-- Chat Header -->
-            <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md flex items-center justify-between">
-                <button id="goBackButton" class="text-sm bg-indigo-500 hover:bg-indigo-400 text-white py-1 px-3 rounded-md transition duration-200">
-                    <svg class="w-4 h-4 inline mr-1 transform rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                    بازگشت
-                </button>
-                <span class="flex-grow text-center pr-24">اتاق: <span id="roomNameDisplay">...</span></span>
-            </div>
-
-            <!-- Messages List -->
-            <div id="messagesContainer" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-800">
-                <!-- Messages will be injected here by JavaScript -->
-                <div class="text-center text-gray-500 mt-4">منتظر پیام‌های جدید...</div>
-            </div>
-
-            <!-- Message Input Area -->
-            <div class="p-4 bg-gray-700 border-t border-gray-600 flex space-x-2 space-x-reverse">
-                <input type="text" id="messageInput" placeholder="پیام خود را تایپ کنید..."
-                       class="flex-grow p-3 bg-gray-800 border border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-base">
-                <button id="sendMessageButton"
-                        class="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition duration-200 flex items-center justify-center">
-                    <svg class="w-6 h-6 transform -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                    </svg>
-                </button>
+    <!-- Modal برای نمایش فاکتور -->
+    <div id="invoiceModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden overflow-y-auto">
+        <div class="p-4 min-h-full flex items-start justify-center">
+            <div id="invoiceContent" class="invoice-content w-full md:w-4/5 lg:w-3/5 bg-white shadow-2xl relative">
+                <!-- محتوای فاکتور اینجا بارگذاری می‌شود -->
             </div>
         </div>
     </div>
+
+
+    <script>
+        // ثابت‌های تعرفه‌ای
+        const MIN_ASBUILT_COST = 3300000; 
+        const ASBUILT_PER_SQM_RATE = 9400; 
+        const COMMERCIAL_UNIT_COST = 450000; 
+        
+        // آدرس‌های تصاویر تعرفه‌ها (Placeholder)
+        const TARIFF_IMAGE_MAP = {
+            kroki: 'https://placehold.co/600x400/285E61/FFF?text=تعرفه+نقشه+کروکی', 
+            utm_gov: 'https://placehold.co/600x400/2B6CB0/FFF?text=تعرفه+UTM+دولتی', 
+            utm_free: 'https://placehold.co/600x400/9C4221/FFF?text=تعرفه+UTM+آزاد', 
+            asbuilt: 'https://placehold.co/600x400/4C51BF/FFF?text=تعرفه+نقشه+تک+خطی+(اصلاحات+جدید)', 
+        };
+        
+        // تعرفه‌ها
+        const TARIFFS = {
+            utm_gov: {
+                agricultural: {
+                    tiers: [
+                        { maxArea: 100, cost: 500000, label: "تا ۱۰۰ متر مربع" },
+                        { maxArea: 250, cost: 800000, label: "از ۱۰۱ تا ۲۵۰ متر مربع" },
+                        { maxArea: 500, cost: 1200000, label: "از ۲۵۱ تا ۵۰۰ متر مربع" },
+                        { maxArea: 1000, cost: 2400000, label: "از ۵۰۱ تا ۱۰۰۰ متر مربع" }
+                    ],
+                    feeOverMaxArea: 2, 
+                    maxBaseArea: 1000,
+                },
+            },
+            utm_free: {
+                residential: { 
+                    tiers: [
+                        { maxArea: 100, cost: 2400000, label: "تا ۱۰۰ متر مربع" },
+                        { maxArea: 250, cost: 4400000, label: "از ۱۰۱ تا ۲۵۰ متر مربع" },
+                        { maxArea: 500, cost: 8400000, label: "از ۲۵۱ تا ۵۰۰ متر مربع" },
+                        { maxArea: 1000, cost: 12000000, label: "از ۵۰۱ تا ۱۰۰۰ متر مربع" },
+                        { maxArea: 5000, cost: 27000000, label: "از ۱۰۰۱ تا ۵۰۰۰ متر مربع" }
+                    ],
+                    feeOverMaxArea: 2.4, 
+                    maxBaseArea: 5000,
+                },
+                minFee: 2322000 
+            },
+            kroki: {
+                tiers: [
+                    { maxArea: 150, cost: 2882000, label: "تا ۱۵۰ متر مربع" },
+                    { maxArea: 250, cost: 2732000, label: "۱۵۰ تا ۲۵۰ متر مربع" },
+                    { maxArea: 400, cost: 2922000, label: "۲۵۰ تا ۴۰۰ متر مربع" },
+                    { maxArea: 1000, cost: 6732000, label: "۴۰۰ تا ۱۰۰۰ متر مربع" }
+                ],
+                feeOverMaxArea: 12000, 
+                maxBaseArea: 1000 
+            },
+            asbuilt: { 
+                tiers: [], // تعرفه متری برای تک خطی
+            }
+        };
+
+        // المان‌های DOM
+        const serviceTypeSelect = document.getElementById('serviceType');
+        const areaInput = document.getElementById('areaInput');
+        const areaLabel = document.getElementById('areaLabel');
+        const asbuiltAreaNote = document.getElementById('asbuiltAreaNote');
+        const commercialUnitsInput = document.getElementById('commercialUnitsInput');
+        const commercialUnitsSelectorDiv = document.getElementById('commercialUnitsSelector');
+        const difficultyFactorSelect = document.getElementById('difficultyFactor');
+        const discountRateInput = document.getElementById('discountRate');
+        const discountValueSpan = document.getElementById('discountValue');
+        const commercialCostDetail = document.getElementById('commercialCostDetail');
+        const propertyTypeSelectorDiv = document.getElementById('propertyTypeSelector');
+        const propertyTypeSelect = document.getElementById('propertyType');
+        const tariffImageContainer = document.getElementById('tariffImageContainer');
+        const tariffImage = document.getElementById('tariffImage');
+        const invoiceModal = document.getElementById('invoiceModal');
+        const invoiceContent = document.getElementById('invoiceContent');
+
+        // متغیرهای ذخیره شده برای فاکتور (به روز رسانی در calculateCost)
+        let calculationDetails = {};
+        
+        // تابع برای فرمت دادن عدد به واحد تومان
+        function formatToman(number) {
+            if (isNaN(number) || number === null) return '۰';
+            const roundedNumber = Math.round(number);
+            return roundedNumber.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' تومان';
+        }
+        
+        // تابع برای فرمت دادن عدد به واحد ریال
+        function formatRial(number) {
+            if (isNaN(number) || number === null) return '۰';
+            const roundedNumber = Math.round(number * 10);
+            return roundedNumber.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' ریال';
+        }
+
+        // تابع به‌روزرسانی متن تخفیف
+        function updateDiscountText() {
+            discountValueSpan.textContent = `${discountRateInput.value}%`;
+        }
+        
+        // تابع نمایش تصویر تعرفه
+        function updateTariffImage(serviceKey) {
+            const imageUrl = TARIFF_IMAGE_MAP[serviceKey];
+            if (imageUrl) {
+                tariffImage.src = imageUrl;
+                tariffImageContainer.classList.remove('hidden');
+            } else {
+                tariffImageContainer.classList.add('hidden');
+            }
+        }
+
+
+        // تابع نمایش/پنهان‌سازی و به‌روزرسانی منوی نوع ملک، واحدهای تجاری و لیبل متراژ
+        function togglePropertyTypeSelector() {
+            const serviceKey = serviceTypeSelect.value;
+            propertyTypeSelect.innerHTML = ''; 
+            
+            // ۱. تغییر لیبل متراژ
+            if (serviceKey === 'asbuilt') {
+                areaLabel.textContent = '۴. متراژ زیر بنا (متر مربع):';
+            } else {
+                areaLabel.textContent = '۴. متراژ ملک (متر مربع):';
+            }
+
+            // ۲. نمایش/پنهان‌سازی تبصره متراژ زیر بنا
+            if (serviceKey === 'asbuilt') {
+                asbuiltAreaNote.classList.remove('hidden');
+            } else {
+                asbuiltAreaNote.classList.add('hidden');
+            }
+
+            // ۳. نمایش/پنهان‌سازی انتخابگر نوع ملک (فقط برای UTM)
+            if (serviceKey === 'utm_free' || serviceKey === 'utm_gov') {
+                propertyTypeSelectorDiv.classList.remove('hidden');
+                
+                if (serviceKey === 'utm_gov') {
+                    propertyTypeSelect.innerHTML = `
+                        <option value="agricultural">زمین کشاورزی</option>
+                        <option value="residential">مسکونی</option>
+                        <option value="commercial">تجاری</option>
+                    `;
+                    propertyTypeNote.textContent = '**توجه:** تعرفه UTM دولتی فقط برای "زمین کشاورزی" تعیین شده است. در صورت انتخاب سایر موارد، محاسبه بر اساس تعرفه کشاورزی انجام می‌شود.';
+                    propertyTypeNote.classList.remove('text-blue-500');
+                    propertyTypeNote.classList.add('text-red-500');
+
+                } else if (serviceKey === 'utm_free') {
+                    propertyTypeSelect.innerHTML = `
+                        <option value="residential">مسکونی</option>
+                        <option value="commercial">تجاری</option>
+                        <option value="agricultural">کشاورزی</option>
+                        <option value="industrial">صنعتی</option>
+                    `;
+                    propertyTypeNote.textContent = '**توجه:** طبق تعرفه ارسالی شما، هزینه UTM آزاد برای همه کاربری‌ها یکسان است.';
+                    propertyTypeNote.classList.remove('text-red-500');
+                    propertyTypeNote.classList.add('text-blue-500');
+                }
+            } else {
+                propertyTypeSelectorDiv.classList.add('hidden');
+            }
+
+            // ۴. نمایش/پنهان‌سازی ورودی واحدهای تجاری (فقط برای نقشه تک خطی)
+            if (serviceKey === 'asbuilt') {
+                commercialUnitsSelectorDiv.classList.remove('hidden');
+            } else {
+                commercialUnitsSelectorDiv.classList.add('hidden');
+            }
+            
+            // ۵. به‌روزرسانی تصویر تعرفه
+            updateTariffImage(serviceKey);
+        }
+
+        // تابع دریافت داده تعرفه صحیح
+        function getServiceData(serviceKey, propertyType) {
+            let data = TARIFFS[serviceKey];
+
+            if (serviceKey === 'utm_gov') {
+                return data.agricultural; 
+            } else if (serviceKey === 'utm_free') {
+                return data.residential;
+            } else {
+                return data;
+            }
+        }
+
+        // تابع محاسبه هزینه پایه و پیدا کردن رده تعرفه
+        function calculateBaseCost(area, serviceKey, propertyType) {
+            const serviceData = getServiceData(serviceKey, propertyType);
+            if (!serviceData || area <= 0 || isNaN(area)) return { baseCost: 0, tierLabel: '---' };
+            
+            let baseCost = 0;
+            let tierLabel = 'تعرفه متری'; // پیش‌فرض برای تک خطی
+            let excessArea = 0;
+
+            if (serviceKey === 'asbuilt') {
+                let calculatedCost = area * ASBUILT_PER_SQM_RATE;
+                baseCost = calculatedCost;
+                
+                if (calculatedCost < MIN_ASBUILT_COST) {
+                    baseCost = MIN_ASBUILT_COST;
+                    tierLabel = `حداقل هزینه (${formatToman(MIN_ASBUILT_COST)})`;
+                } else {
+                    tierLabel = `محاسبه متری (${formatToman(ASBUILT_PER_SQM_RATE)}/متر)`;
+                }
+                
+                if (area > 800) {
+                    // هزینه تبصره 800+ متر برای تک خطی اضافه می‌شود
+                    baseCost += 800000; 
+                    tierLabel += ' + تبصره ۸۰۰+ متر';
+                }
+
+            } else {
+                let foundTier = false;
+                for (const tier of serviceData.tiers) {
+                    if (area <= tier.maxArea) {
+                        baseCost = tier.cost;
+                        tierLabel = tier.label;
+                        foundTier = true;
+                        break;
+                    }
+                }
+                
+                if (!foundTier) {
+                    baseCost = serviceData.tiers[serviceData.tiers.length - 1].cost;
+                    excessArea = area - serviceData.maxBaseArea;
+                    baseCost += excessArea * serviceData.feeOverMaxArea;
+                    tierLabel = `بیش از ${serviceData.maxBaseArea} متر مربع (مازاد: ${formatToman(serviceData.feeOverMaxArea)}/متر)`
+                }
+            }
+            
+            if (serviceKey === 'utm_free') {
+                 if (baseCost < TARIFFS.utm_free.minFee) {
+                    baseCost = TARIFFS.utm_free.minFee;
+                    tierLabel = `حداقل هزینه UTM آزاد (${formatToman(TARIFFS.utm_free.minFee)})`;
+                 }
+            }
+
+            return { baseCost, tierLabel, excessArea };
+        }
+
+        // تابع اصلی محاسبه هزینه نهایی
+        function calculateCost() {
+            const area = parseFloat(areaInput.value);
+            const serviceKey = serviceTypeSelect.value;
+            const difficultyMultiplier = parseFloat(difficultyFactorSelect.value);
+            const discountPercent = parseInt(discountRateInput.value);
+            const commercialUnits = serviceKey === 'asbuilt' ? parseInt(commercialUnitsInput.value) : 0;
+            const propertyType = propertyTypeSelect.value; 
+
+            if (isNaN(area) || area <= 0) {
+                // اگر متراژ معتبر نبود، جزئیات را صفر کنید و فاکتور را آپدیت نکنید
+                document.getElementById('finalCostDisplay').textContent = '۰ تومان';
+                document.getElementById('baseCostDetail').textContent = 'هزینه پایه محاسبه شده: ۰ تومان';
+                document.getElementById('commercialCostDetail').classList.add('hidden');
+                return;
+            }
+
+            // ۱. محاسبه هزینه پایه متراژی و جزئیات رده
+            const { baseCost: baseServiceCost, tierLabel, excessArea } = calculateBaseCost(area, serviceKey, propertyType);
+            
+            // ۲. محاسبه هزینه واحدهای تجاری
+            let commercialCost = 0;
+            if (serviceKey === 'asbuilt' && !isNaN(commercialUnits) && commercialUnits > 0) {
+                commercialCost = commercialUnits * COMMERCIAL_UNIT_COST;
+                commercialCostDetail.textContent = `هزینه ${commercialUnits} واحد تجاری: ${formatToman(commercialCost)}`;
+                commercialCostDetail.classList.remove('hidden');
+            } else {
+                commercialCostDetail.classList.add('hidden');
+            }
+            
+            // ۳. جمع کل هزینه قبل از ضریب سختی
+            const totalPreFactorCost = baseServiceCost + commercialCost;
+
+            // ۴. اعمال ضریب سختی کار
+            const complexCost = totalPreFactorCost * difficultyMultiplier;
+
+            // ۵. اعمال تخفیف
+            const discountAmount = complexCost * (discountPercent / 100);
+            const finalCost = complexCost - discountAmount;
+
+            // ۶. ذخیره جزئیات برای فاکتور
+            let serviceName = serviceTypeSelect.options[serviceTypeSelect.selectedIndex].text;
+            let propertyName = '';
+            if (serviceKey === 'utm_free' || serviceKey === 'utm_gov') {
+                propertyName = propertyTypeSelect.options[propertyTypeSelect.selectedIndex].text;
+                serviceName = `${serviceName} (${propertyName})`;
+            }
+            
+            calculationDetails = {
+                area: area,
+                areaLabelText: areaLabel.textContent.replace('۴. ', '').replace(':', ''),
+                serviceKey: serviceKey,
+                serviceName: serviceName,
+                propertyType: propertyName,
+                tierLabel: tierLabel,
+                baseServiceCost: baseServiceCost,
+                commercialUnits: commercialUnits,
+                commercialCost: commercialCost,
+                difficultyMultiplier: difficultyMultiplier,
+                totalPreFactorCost: totalPreFactorCost,
+                complexCost: complexCost,
+                discountPercent: discountPercent,
+                discountAmount: discountAmount,
+                finalCost: finalCost,
+                // جزئیات اضافی برای نمایش در فاکتور
+                excessArea: excessArea,
+                baseRate: commercialUnits > 0 ? ASBUILT_PER_SQM_RATE : null, // فقط برای تک خطی
+            };
+
+
+            // ۷. نمایش نتایج در UI
+            document.getElementById('finalCostDisplay').textContent = formatToman(finalCost);
+            document.getElementById('baseCostDetail').textContent = `هزینه پایه محاسبه شده (${tierLabel}): ${formatToman(baseServiceCost)}`;
+            document.getElementById('complexityDetail').textContent = `ضریب سختی اعمال شده: ${difficultyMultiplier.toFixed(1)} | مبلغ بعد از ضریب: ${formatToman(complexCost)}`;
+            document.getElementById('discountDetail').textContent = `میزان تخفیف: ${discountPercent}% | مبلغ تخفیف: ${formatToman(discountAmount)}`;
+        }
+
+        // تابع تولید و نمایش فاکتور
+        function generateInvoice() {
+            if (calculationDetails.finalCost === undefined || calculationDetails.finalCost <= 0) {
+                // نمایش پیام خطای جایگزین alert
+                invoiceContent.innerHTML = `
+                    <div class="p-8 text-center">
+                        <p class="text-xl font-bold text-red-600">خطا: برای صدور فاکتور، ابتدا باید محاسبات را با متراژ معتبر انجام دهید.</p>
+                        <button onclick="closeInvoiceModal()" class="mt-4 px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">بستن</button>
+                    </div>
+                `;
+                invoiceModal.classList.remove('hidden');
+                return;
+            }
+            
+            const officeName = document.getElementById('officeName').value || 'دفتر مهندسی';
+            const officeAddress = document.getElementById('officeAddress').value || 'نا مشخص';
+            const officePhone = document.getElementById('officePhone').value || 'نا مشخص';
+            const applicantName = document.getElementById('applicantName').value || 'متقاضی محترم';
+            const applicantPhone = document.getElementById('applicantPhone').value || 'نا مشخص';
+            
+            const currentDate = new Date().toLocaleDateString('fa-IR');
+
+            const finalCostToman = formatToman(calculationDetails.finalCost);
+            const finalCostRial = formatRial(calculationDetails.finalCost);
+            const baseCostRial = formatRial(calculationDetails.baseServiceCost);
+            const commercialCostRial = formatRial(calculationDetails.commercialCost);
+            const totalPreFactorRial = formatRial(calculationDetails.totalPreFactorCost);
+            const complexCostRial = formatRial(calculationDetails.complexCost);
+            const discountAmountRial = formatRial(calculationDetails.discountAmount);
+            
+            // تعیین واحد متراژ برای نمایش
+            const areaUnit = calculationDetails.areaLabelText.includes('زیر بنا') ? 'متر بنا' : 'متر مربع';
+            
+            // تولید HTML جزئیات تعرفه
+            let tariffDetailHTML = '';
+            if (calculationDetails.serviceKey === 'asbuilt') {
+                tariffDetailHTML = `
+                    <p><strong>نوع محاسبه:</strong> تعرفه متری بر اساس متراژ زیر بنا (${calculationDetails.area.toLocaleString('fa-IR')} ${areaUnit})</p>
+                    <p><strong>نرخ متری (قبل از اعمال حداقل):</strong> ${formatToman(ASBUILT_PER_SQM_RATE)} (برای هر متر مربع زیر بنا)</p>
+                    <p><strong>ضوابط اعمال شده:</strong> ${calculationDetails.tierLabel}</p>
+                    ${calculationDetails.commercialUnits > 0 ? `<p><strong>هزینه واحدهای تجاری:</strong> ${calculationDetails.commercialUnits} واحد &times; ${formatToman(COMMERCIAL_UNIT_COST)}</p>` : ''}
+                `;
+            } else {
+                 tariffDetailHTML = `
+                    <p><strong>متراژ ملک:</strong> ${calculationDetails.area.toLocaleString('fa-IR')} ${areaUnit}</p>
+                    <p><strong>رده تعرفه ملک:</strong> ${calculationDetails.tierLabel}</p>
+                    ${calculationDetails.excessArea > 0 ? `<p class="text-xs text-red-600">هزینه مازاد متراژ (${calculationDetails.excessArea.toLocaleString('fa-IR')} متر) نیز محاسبه شده است.</p>` : ''}
+                `;
+            }
+
+
+            const invoiceHTML = `
+                <div class="print:text-black">
+                    <!-- سربرگ فاکتور -->
+                    <div class="text-center border-b-2 border-slate-800 pb-3 mb-6">
+                        <h2 class="text-3xl font-black text-slate-800 mb-1">فاکتور رسمی خدمات مهندسی</h2>
+                        <h3 class="text-xl font-bold text-blue-700">${officeName}</h3>
+                        <p class="text-sm text-gray-600">تاریخ صدور: ${currentDate}</p>
+                    </div>
+
+                    <!-- اطلاعات دفتر و مشتری -->
+                    <div class="flex justify-between text-sm mb-6 border-b pb-4">
+                        <div class="w-1/2">
+                            <p class="font-bold">فروشنده (دفتر):</p>
+                            <p>آدرس: ${officeAddress}</p>
+                            <p>تلفن: ${officePhone}</p>
+                        </div>
+                        <div class="w-1/2 text-left">
+                            <p class="font-bold">خریدار (متقاضی):</p>
+                            <p>نام و نام خانوادگی: ${applicantName}</p>
+                            <p>تلفن: ${applicantPhone}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- بخش شفاف‌سازی محاسبه (جدید) -->
+                    <div class="p-4 mb-6 border border-sky-300 rounded-lg bg-sky-50">
+                        <h4 class="text-lg font-bold text-sky-700 mb-2 border-b border-sky-300 pb-1">جزئیات محاسبه تعرفه</h4>
+                        <p class="text-sm mb-3"><strong>خدمت مورد درخواست:</strong> ${calculationDetails.serviceName}</p>
+                        
+                        <!-- تعرفه اعمالی -->
+                        <div class="p-3 mb-3 bg-white rounded-md border border-gray-200 text-sm space-y-1">
+                            <p class="font-bold text-gray-800">تعرفه متراژی اعمال شده:</p>
+                            ${tariffDetailHTML}
+                        </div>
+
+                        <!-- جدول گام به گام هزینه -->
+                        <table class="w-full detail-table text-sm">
+                            <tr class="font-semibold bg-sky-100">
+                                <td class="w-2/3">۱. هزینه پایه (بر اساس متراژ و رده تعرفه)</td>
+                                <td class="w-1/3 text-left">${baseCostRial}</td>
+                            </tr>
+                            ${calculationDetails.commercialUnits > 0 ? `
+                            <tr class="bg-sky-50">
+                                <td>۲. هزینه واحدهای تجاری (${calculationDetails.commercialUnits} واحد)</td>
+                                <td class="text-left">${commercialCostRial}</td>
+                            </tr>` : ''}
+                            <tr class="font-bold border-t border-sky-300">
+                                <td>جمع کل (قبل از ضریب سختی)</td>
+                                <td class="text-left">${totalPreFactorRial}</td>
+                            </tr>
+                             <tr>
+                                <td>۳. ضریب سختی کار (اعمال ضریب ${calculationDetails.difficultyMultiplier.toFixed(1)})</td>
+                                <td class="text-left font-bold text-blue-700">${complexCostRial}</td>
+                            </tr>
+                            <tr class="text-red-600">
+                                <td>۴. کسر تخفیف (درصد ${calculationDetails.discountPercent}%)</td>
+                                <td class="text-left">- ${discountAmountRial}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <!-- جدول سرویس‌های نهایی -->
+                    <table class="w-full invoice-table text-sm border-collapse">
+                        <thead>
+                            <tr>
+                                <th class="w-1/12">ردیف</th>
+                                <th class="w-7/12">شرح خدمت (خلاصه)</th>
+                                <th class="w-4/12">مبلغ نهایی (ریال)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>۱</td>
+                                <td> ${calculationDetails.serviceName} - شامل متراژ ${calculationDetails.area.toLocaleString('fa-IR')} ${areaUnit}، با ضریب سختی ${calculationDetails.difficultyMultiplier.toFixed(1)} و تخفیف ${calculationDetails.discountPercent}%</td>
+                                <td class="font-bold">${finalCostRial}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- خلاصه نهایی هزینه -->
+                    <div class="mt-6 p-4 border-2 border-green-600 rounded-lg bg-green-50">
+                        <div class="flex justify-between items-center font-bold text-lg text-slate-800">
+                            <span>مبلغ نهایی فاکتور (به حروف):</span>
+                            <span id="amountInWords" class="text-base font-normal">... (لطفاً مبلغ را دستی به حروف بنویسید)</span>
+                        </div>
+                        <div class="flex justify-between items-center font-extrabold text-2xl text-green-700 pt-2">
+                            <span>مبلغ نهایی (تومان):</span>
+                            <span>${finalCostToman}</span>
+                        </div>
+                         <div class="flex justify-between items-center font-extrabold text-xl text-green-700 pt-2 border-t border-green-300 mt-2">
+                            <span>مبلغ نهایی (ریال):</span>
+                            <span>${finalCostRial}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- امضا و مهر -->
+                    <div class="flex justify-between mt-12 text-sm">
+                        <div class="w-1/2 text-center pt-8 border-t border-dashed">
+                            امضا و مهر خریدار
+                        </div>
+                        <div class="w-1/2 text-center pt-8 border-t border-dashed">
+                            امضا و مهر فروشنده
+                        </div>
+                    </div>
+                </div>
+
+                <!-- دکمه‌های کنترلی (خارج از فاکتور اصلی) -->
+                <div class="mt-8 flex justify-center space-x-4 space-x-reverse print:hidden">
+                    <button onclick="closeInvoiceModal()" class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">بستن</button>
+                    <button onclick="printInvoiceContent()" class="px-6 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition">پرینت فاکتور</button>
+                </div>
+            `;
+            
+            invoiceContent.innerHTML = invoiceHTML;
+            invoiceModal.classList.remove('hidden');
+        }
+
+        // تابع بستن مُدال فاکتور
+        function closeInvoiceModal() {
+            invoiceModal.classList.add('hidden');
+        }
+
+        // تابع پرینت فاکتور
+        function printInvoiceContent() {
+             const printContent = invoiceContent.innerHTML;
+             const printWindow = window.open('', '', 'height=600,width=800');
+             
+             printWindow.document.write('<html><head><title>فاکتور خدمات مهندسی</title>');
+             // کپی کردن استایل‌های ضروری برای پرینت
+             printWindow.document.write('<style>');
+             printWindow.document.write('body { font-family: \'Vazirmatn\', sans-serif; direction: rtl; }');
+             printWindow.document.write('.invoice-content { max-width: 800px; margin: 0 auto; padding: 20px; }');
+             printWindow.document.write('table { width: 100%; border-collapse: collapse; margin-top: 15px; }');
+             printWindow.document.write('th, td { padding: 10px; border: 1px solid #000; text-align: right; }');
+             printWindow.document.write('.detail-table td { padding: 8px 10px; border: none; }');
+             printWindow.document.write('th { background-color: #f0f0f0; }');
+             printWindow.document.write('.print\\:hidden { display: none !important; }');
+             printWindow.document.write('</style>');
+             printWindow.document.write('</head><body>');
+             
+             // حذف دکمه‌های کنترلی از نسخه پرینت
+             const cleanPrintContent = printContent.replace(/<div class="mt-8 flex justify-center space-x-4 space-x-reverse print:hidden">.*?<\/div>/s, '');
+
+             printWindow.document.write('<div class="invoice-content">' + cleanPrintContent + '</div>');
+             printWindow.document.write('</body></html>');
+             
+             printWindow.document.close();
+             printWindow.focus();
+             printWindow.print();
+             printWindow.close();
+        }
+
+
+        // فراخوانی اولیه برای تنظیم مقادیر پیش‌فرض
+        window.onload = () => {
+            togglePropertyTypeSelector();
+            updateDiscountText();
+            calculateCost();
+        };
+
+    </script>
 </body>
 </html>
