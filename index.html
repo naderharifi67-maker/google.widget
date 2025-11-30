@@ -77,7 +77,8 @@
     <script type="module">
         // وارد کردن ماژول‌های لازم از Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // بازگرداندن signInWithCustomToken برای استفاده از توکن محیط کاری
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -85,9 +86,9 @@
         // تنظیمات عمومی Firebase (توسط محیط کاری فراهم می‌شود)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; // توکن سفارشی مجدداً تعریف شد
 
-        let db, auth, userId = null;
+        let db, auth, userId = null; 
         const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
 
         const messageInput = document.getElementById('message-input');
@@ -104,7 +105,7 @@
 
         // --- توابع کمکی ---
 
-        // تابع برای تبدیل زمان‌بندی Firebase به یک رشته قابل خواندن (خورشیدی نیست، اما قالب‌بندی شده است)
+        // تابع برای تبدیل زمان‌بندی Firebase به یک رشته قابل خواندن 
         function formatTimestamp(timestamp) {
             if (timestamp && timestamp.toDate) {
                 const date = timestamp.toDate();
@@ -122,12 +123,15 @@
         function renderMessages(messages) {
             messagesContainer.innerHTML = ''; // پاک کردن پیام‌های قبلی
             if (messages.length === 0) {
+                const loadingMsg = document.getElementById('loading-message');
+                if (loadingMsg) loadingMsg.remove();
                 messagesContainer.innerHTML = '<p class="text-center text-gray-400 p-4">هنوز پیامی ارسال نشده است. اولین پیام را شما بنویسید!</p>';
                 return;
             }
 
             // پیمایش پیام‌ها و ایجاد حباب‌های پیام
             messages.forEach(msg => {
+                // مقایسه با شناسه موقت کاربر فعلی
                 const isMine = msg.userId === userId;
                 
                 const messageDiv = document.createElement('div');
@@ -136,7 +140,8 @@
                 // اطلاعات کاربر
                 const userSpan = document.createElement('span');
                 userSpan.className = `font-bold text-xs ${isMine ? 'text-indigo-200' : 'text-indigo-600'}`;
-                userSpan.textContent = isMine ? 'شما' : `کاربر: ${msg.userId.substring(0, 8)}...`;
+                // نمایش "شما" اگر شناسه پیام با شناسه کاربر احراز هویت شده یکسان باشد
+                userSpan.textContent = isMine ? 'شما (احراز هویت شده)' : `کاربر: ${msg.userId.substring(0, 8)}...`;
                 
                 // محتوای پیام
                 const contentP = document.createElement('p');
@@ -167,38 +172,36 @@
                 // 1. راه‌اندازی برنامه و سرویس‌ها
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
-                auth = getAuth(app);
-
-                // 2. تنظیم شنونده تغییر وضعیت احراز هویت بلافاصله پس از راه‌اندازی auth
-                // این کار تضمین می‌کند که getAuth() با موفقیت اجرا شده است و خطا برطرف می‌شود.
+                auth = getAuth(app); 
+                
+                // 2. تنظیم شنونده وضعیت احراز هویت
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        // کاربر احراز هویت شده است
-                        userId = user.uid;
+                        // احراز هویت موفقیت‌آمیز است
+                        userId = user.uid; // استفاده از شناسه واقعی Firebase
                         userIdDisplay.textContent = `شناسه کاربری: ${userId.substring(0, 8)}...`;
                         authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
+                        statusBar.classList.remove('hidden');
                         sendButton.disabled = false;
                         setupRealtimeListener(); // شروع گوش دادن به پیام‌ها
                     } else {
-                        // در انتظار یا عدم احراز هویت (در صورت عدم استفاده از initialAuthToken)
+                        // احراز هویت ناموفق یا در حال انتظار
                         userId = null;
-                        authStatus.textContent = 'لطفاً صبر کنید...';
+                        authStatus.textContent = 'در حال تلاش برای احراز هویت...';
                         sendButton.disabled = true;
                     }
                 });
 
-                // 3. تلاش برای احراز هویت با توکن سفارشی یا به صورت ناشناس
+                // 3. تلاش برای احراز هویت با توکن سفارشی (اولویت بالاتر) یا به صورت ناشناس
+                // این کار احتمال کسب مجوزهای لازم را افزایش می‌دهد.
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
 
-                authStatus.textContent = 'احراز هویت موفقیت‌آمیز.';
-                statusBar.classList.remove('hidden');
-
             } catch (error) {
-                console.error("خطا در راه‌اندازی Firebase یا احراز هویت:", error);
+                console.error("خطا در راه‌اندازی Firebase:", error);
                 authStatus.textContent = 'خطا در اتصال: ' + error.message;
             }
         }
@@ -209,20 +212,36 @@
             // ساخت کوئری: گرفتن مجموعه پیام‌ها و مرتب‌سازی بر اساس زمان ارسال
             const messagesQuery = query(
                 collection(db, messagesCollectionPath),
-                orderBy('timestamp', 'asc')
+                // اجتناب از orderBy در فیلدی که ایندکس ندارد (مانند 'timestamp') و به جای آن در حافظه مرتب می‌کنیم.
             );
             
             // گوش دادن به تغییرات در لحظه
             const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-                loadingMessage.remove();
+                // اگر پیام بارگذاری شده باشد، پیام "در حال بارگذاری" را حذف کن
+                const loadingMsg = document.getElementById('loading-message');
+                if (loadingMsg) loadingMsg.remove();
+                
                 const messages = [];
                 snapshot.forEach(doc => {
                     messages.push({ id: doc.id, ...doc.data() });
                 });
+
+                // مرتب‌سازی در جاوا اسکریپت برای جلوگیری از خطای "index missing"
+                messages.sort((a, b) => {
+                    const timeA = a.timestamp && a.timestamp.seconds ? a.timestamp.seconds : 0;
+                    const timeB = b.timestamp && b.timestamp.seconds ? b.timestamp.seconds : 0;
+                    return timeA - timeB;
+                });
+
                 renderMessages(messages);
             }, (error) => {
                 console.error("خطا در دریافت لحظه‌ای پیام‌ها:", error);
-                messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا در بارگذاری پیام‌ها: ${error.message}</p>`;
+                // نمایش خطای مجوز در صورت بروز مجدد
+                if (error.code === 'permission-denied') {
+                    messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا: مجوز دسترسی به پیام‌ها وجود ندارد. احتمالاً احراز هویت ناموفق بوده است. (Permission Denied)</p>`;
+                } else {
+                    messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا در بارگذاری پیام‌ها: ${error.message}</p>`;
+                }
             });
 
             // برگرداندن تابع لغو اشتراک در صورت نیاز
@@ -235,7 +254,7 @@
             const text = messageInput.value.trim();
 
             if (!text || !db || !userId) {
-                errorElement.textContent = 'متن پیام یا اتصال معتبر نیست.';
+                errorElement.textContent = 'برای ارسال پیام، اتصال برقرار و متن پیام باید وجود داشته باشد.';
                 errorElement.classList.remove('hidden');
                 return;
             }
@@ -245,7 +264,7 @@
 
             const newMessage = {
                 text: text,
-                userId: userId, // شناسه کاربر برای نمایش "شما"
+                userId: userId, 
                 timestamp: serverTimestamp() // زمان‌بندی از سرور برای جلوگیری از خطا
             };
 
