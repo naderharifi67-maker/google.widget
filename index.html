@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>گفتگوی رمزی</title>
+    <title>گفتگوی با ورود مخفی</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Firebase SDKs -->
@@ -16,7 +16,6 @@
         // --- GLOBAL FIREBASE VARIABLES (MANDATORY INJECTION) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
-        // اصلاح شده: ما همیشه یک شیء پیکربندی با projectId خواهیم داشت
         let firebaseConfig = {};
         try {
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
@@ -26,10 +25,9 @@
             console.error("Failed to parse __firebase_config:", e);
         }
         
-        // اگر پیکربندی لازم فراهم نشده باشد، از یک پیکربندی ساختگی (Mock) استفاده می‌کنیم تا خطای پیکربندی کاربر را نشان ندهیم.
+        // اگر پیکربندی لازم فراهم نشده باشد، از یک پیکربندی ساختگی (Mock) استفاده می‌کنیم
         if (!firebaseConfig.projectId) {
             console.warn("No valid Firebase config provided. Using a mock configuration.");
-            // این پیکربندی ساختگی، اجازه می‌دهد تا app = initializeApp() بدون نمایش خطای کاربر اجرا شود.
             firebaseConfig = {
                 apiKey: "mock-key",
                 authDomain: "mock-domain.firebaseapp.com",
@@ -39,26 +37,36 @@
         
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // DOM elements (Define them before the config check for immediate use)
-        const secretWordScreen = document.getElementById('secretWordScreen');
+        // DOM elements
+        const secretEntryScreen = document.getElementById('secretEntryScreen');
         const chatScreen = document.getElementById('chatScreen');
-        const enterChatButton = document.getElementById('enterChatButton');
-        const secretWordInput = document.getElementById('secretWordInput');
+        const magicLine = document.getElementById('magicLine'); // خط قابل کلیک جدید
         const messageInput = document.getElementById('messageInput');
         const sendMessageButton = document.getElementById('sendMessageButton');
         const messagesContainer = document.getElementById('messagesContainer');
         const roomNameDisplay = document.getElementById('roomNameDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const statusMessage = document.getElementById('statusMessage');
-        const goBackButton = document.getElementById('goBackButton'); // دکمه جدید
+        const goBackButton = document.getElementById('goBackButton'); 
         
         // متغیرهای فایربیس با let تعریف می‌شوند
         let app = null;
         let db = null;
         let auth = null;
         let currentUserId = null;
-        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
+        let unsubscribe = null; 
         
+        // متغیرهای کلیک مخفی
+        let clickCount = 0;
+        let clickTimeout = null;
+        const REQUIRED_CLICKS = 3;
+        const CLICK_TIMEOUT_MS = 500; // حداکثر زمان بین کلیک‌ها
+
+        // ثابت برای شناسه اتاق (به جای کلمه رمز)
+        const FIXED_CHAT_ROOM_ID = "public_secret_entry_chat_room";
+        const ROOM_NAME = "گفتگوی عمومی (ورود سریع)";
+
+
         // فعال‌سازی لاگ دیباگ فایربیس
         setLogLevel('debug');
 
@@ -70,15 +78,10 @@
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
-            // Check if db and auth are initialized, handling the mock scenario gracefully
             if (firebaseConfig.projectId === "mock-project-id" || !db || !auth) {
-                 // In the mock config case, we skip the retry logic as it will always fail the actual API call
                  if (fn.name.includes('signIn')) {
-                    // For auth, assume success in mock mode to let the app proceed
-                    console.log("Mock configuration detected. Skipping Firebase authentication.");
                     return { user: { uid: 'MOCK_USER_' + crypto.randomUUID() } };
                  } else {
-                     // For Firestore ops, log and fail gracefully
                      console.error("Firebase services are mocked or not initialized. Firestore operation skipped.");
                      throw new Error("MOCK_FIRESTORE_ACCESS_DENIED");
                  }
@@ -89,8 +92,6 @@
                     return await fn();
                 } catch (error) {
                     if (i === retries - 1) throw error;
-                    // فقط ارور را در کنسول نمایش می دهیم و retry را لاگ نمی کنیم
-                    // console.warn(`Retry attempt ${i + 1} failed. Retrying in ${delay * Math.pow(2, i)}ms...`, error);
                     await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
                 }
             }
@@ -98,53 +99,43 @@
 
         // تابع مدیریت احراز هویت
         const handleAuth = async () => {
-            if (!auth) return; // اطمینان از مقداردهی auth
+            if (!auth) return; 
             
-            statusMessage.textContent = "در حال اتصال به سرور و احراز هویت...";
-            statusMessage.classList.remove('text-green-400', 'text-red-400', 'font-bold');
+            statusMessage.textContent = "در حال اتصال و احراز هویت ناشناس...";
+            statusMessage.classList.remove('text-green-400', 'text-red-400', 'font-bold', 'text-orange-400');
             statusMessage.classList.add('text-yellow-400');
-            enterChatButton.disabled = true;
-            enterChatButton.classList.add('opacity-50', 'cursor-not-allowed'); // مطمئن شویم غیرفعال است
 
             try {
                 let userCredential;
                 if (initialAuthToken) {
-                    // 1. تلاش برای ورود با توکن کاستوم
                     userCredential = await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
                 } else {
-                    // 2. اگر توکن نبود یا شکست خورد، تلاش برای ورود ناشناس
                     userCredential = await fetchWithRetry(() => signInAnonymously(auth));
                 }
-                // If it's a mock user, we need to manually update the UI/state since onAuthStateChanged won't fire for mock auth
+                
                 if (userCredential && userCredential.user && userCredential.user.uid.startsWith('MOCK_USER_')) {
+                    // حالت ساختگی
                     const mockUser = userCredential.user;
                     currentUserId = mockUser.uid;
-                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId} (حالت آفلاین/تستی)`;
-                    
-                    statusMessage.textContent = "حالت تستی فعال: فایربیس غیرفعال";
+                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId} (تستی)`;
+                    statusMessage.textContent = "حالت تستی فعال: آماده ورود مخفی";
                     statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
-                    statusMessage.classList.add('text-orange-400', 'font-bold'); // رنگ جدید برای حالت تستی
-                    enterChatButton.disabled = false; // فعال کردن دکمه
-                    enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    statusMessage.classList.add('text-orange-400', 'font-bold'); 
                     initializeEventListeners();
                 }
             } catch (error) {
-                // اگر تمام تلاش‌ها شکست خورد
-                if (error.message === "MOCK_FIRESTORE_ACCESS_DENIED") {
-                     // Do nothing, we handled the mock case
-                     return;
-                }
+                if (error.message === "MOCK_FIRESTORE_ACCESS_DENIED") return;
+
                 console.error("Authentication failed after retries:", error);
-                // پیام خطا را به حالت متداول‌تر تغییر می‌دهیم
                 statusMessage.textContent = "خطا در احراز هویت. (کنسول را برای جزئیات خطا بررسی کنید)";
-                statusMessage.classList.remove('text-yellow-400');
+                statusMessage.classList.remove('text-yellow-400', 'text-orange-400');
                 statusMessage.classList.add('text-red-400', 'font-bold');
             }
         };
 
 
-        // 1. Authentication Setup
-        if (auth) { // تنها در صورتی که auth مقداردهی شده باشد، شنونده را فعال کن
+        // 1. Authentication Setup Listener
+        if (auth) { 
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     currentUserId = user.uid;
@@ -152,13 +143,9 @@
                     if (!user.uid.startsWith('MOCK_USER_')) {
                          userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
                         
-                         // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
-                         statusMessage.textContent = "متصل: آماده ورود به چت";
+                         statusMessage.textContent = "متصل: آماده ورود مخفی";
                          statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold', 'text-orange-400');
                          statusMessage.classList.add('text-green-400');
-                         enterChatButton.disabled = false; // فعال کردن دکمه
-                         enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                         // ------------------------------------------------
                          initializeEventListeners();
                     }
                 } else {
@@ -173,47 +160,75 @@
         // 2. Main Application Logic
         const initializeEventListeners = () => {
             // مطمئن شوید event listeners فقط یک بار اضافه می شوند
-            if (enterChatButton.hasAttribute('data-listeners-attached')) return;
+            if (magicLine.hasAttribute('data-listeners-attached')) return;
             
-            enterChatButton.addEventListener('click', handleEnterChat);
-            secretWordInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleEnterChat();
-            });
+            magicLine.addEventListener('click', handleThreeClickEntry);
             sendMessageButton.addEventListener('click', handleSendMessage);
             messageInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleSendMessage();
             });
-            goBackButton.addEventListener('click', handleGoBack); // رویداد جدید
+            goBackButton.addEventListener('click', handleGoBack); 
             
-            enterChatButton.setAttribute('data-listeners-attached', 'true');
+            magicLine.setAttribute('data-listeners-attached', 'true');
         };
+
+        // --- NEW: Three-Click Entry Logic ---
+        const handleThreeClickEntry = () => {
+            if (!currentUserId) {
+                alertUser("خطا: احراز هویت هنوز کامل نشده است. لطفاً چند لحظه صبر کنید.");
+                return;
+            }
+
+            clickCount++;
+            magicLine.textContent = `کلیک شد! (${clickCount}/${REQUIRED_CLICKS}). سریع کلیک کنید...`;
+            magicLine.classList.add('animate-pulse');
+
+            if (clickCount === REQUIRED_CLICKS) {
+                clearTimeout(clickTimeout);
+                magicLine.textContent = `ورود مخفی انجام شد!`;
+                magicLine.classList.remove('animate-pulse');
+                magicLine.classList.add('text-green-400');
+                
+                // انتقال به صفحه چت
+                setTimeout(() => {
+                    handleEnterChat();
+                }, 300);
+
+            } else {
+                // ریست کردن شمارنده اگر کلیک‌های بعدی خیلی دیر انجام شوند
+                clearTimeout(clickTimeout);
+                clickTimeout = setTimeout(() => {
+                    clickCount = 0;
+                    magicLine.textContent = "روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.";
+                    magicLine.classList.remove('animate-pulse', 'text-green-400');
+                }, CLICK_TIMEOUT_MS);
+            }
+        }
+        // --- END: Three-Click Entry Logic ---
 
         const handleGoBack = () => {
             if (unsubscribe) {
                 unsubscribe(); // توقف گوش دادن به چت قبلی
             }
             chatScreen.classList.add('hidden');
-            secretWordScreen.classList.remove('hidden');
-            secretWordInput.focus();
+            secretEntryScreen.classList.remove('hidden');
+            magicLine.focus();
+            
+            // Reset click state
+            clickCount = 0;
+            clearTimeout(clickTimeout);
+            magicLine.textContent = "روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.";
+            magicLine.classList.remove('animate-pulse', 'text-green-400');
         };
 
-        const sanitizeChatRoomId = (word) => {
-            // Converts the secret word into a safe, lowercase identifier for the Firestore path
-            return word.trim().toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '_').substring(0, 50);
-        }
 
         const handleEnterChat = () => {
             // اگر در حالت Mock هستیم، دسترسی به دیتابیس ممکن است منجر به خطا شود.
             if (firebaseConfig.projectId === "mock-project-id" || !db) {
-                alertUser("خطای دیتابیس: اتصال به سرور فایربیس برقرار نیست. اگر از کلمه رمز استفاده کردید و چت باز نشد، ممکن است قوانین امنیتی (Security Rules) فایربیس دسترسی را مسدود کرده باشند.");
+                alertUser("خطای دیتابیس: اتصال به سرور فایربیس برقرار نیست. لطفا برای حالت آنلاین، پیکربندی Canvas را بررسی کنید.");
                 return;
             }
 
-            const secretWord = secretWordInput.value.trim();
-            if (secretWord.length < 3) {
-                alertUser("کلمه رمز باید حداقل ۳ حرف باشد.");
-                return;
-            }
             if (!currentUserId) {
                  alertUser("خطا: اتصال به سرور هنوز کامل نشده است. لطفا چند لحظه صبر کنید.");
                  return;
@@ -224,14 +239,13 @@
                 unsubscribe();
             }
 
-            const chatRoomId = sanitizeChatRoomId(secretWord);
+            const chatRoomId = FIXED_CHAT_ROOM_ID;
             
             // Public Path: /artifacts/{appId}/public/data/secret_chats/{chatRoomId}/messages
             const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
             const chatCollectionRef = collection(db, chatCollectionPath);
 
             // 3. Start listening for messages (onSnapshot)
-            // توجه: orderBy حذف شد تا از خطاهای ایندکس جلوگیری شود. مرتب‌سازی در حافظه انجام می‌شود.
             const messagesQuery = query(chatCollectionRef); 
 
             unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
@@ -244,7 +258,6 @@
 
                 // مرتب‌سازی در حافظه بر اساس timestamp (صعودی)
                 messages.sort((a, b) => {
-                    // تبدیل به میلی‌ثانیه برای مقایسه، با یک مقدار پیش‌فرض صفر برای داده‌های در حال نوشتن
                     const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : 0;
                     const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : 0;
                     return timeA - timeB;
@@ -264,8 +277,8 @@
             });
 
             // Update UI
-            roomNameDisplay.textContent = secretWord;
-            secretWordScreen.classList.add('hidden');
+            roomNameDisplay.textContent = ROOM_NAME;
+            secretEntryScreen.classList.add('hidden');
             chatScreen.classList.remove('hidden');
             messageInput.focus();
         };
@@ -278,11 +291,10 @@
             }
 
             const messageText = messageInput.value.trim();
-            const secretWord = secretWordInput.value.trim();
 
-            if (!messageText || !secretWord || !currentUserId) return;
+            if (!messageText || !currentUserId) return;
 
-            const chatRoomId = sanitizeChatRoomId(secretWord);
+            const chatRoomId = FIXED_CHAT_ROOM_ID;
             const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
             const chatCollectionRef = collection(db, chatCollectionPath);
             
@@ -360,9 +372,6 @@
             };
         };
 
-        // Expose alert function globally for use outside module if needed
-        window.alertUser = alertUser;
-
     </script>
     <style>
         /* Custom scrollbar for chat container */
@@ -380,6 +389,10 @@
         body {
             /* تنظیم فونت برای خوانایی بهتر در زبان فارسی روی دستگاه‌های مختلف */
             font-family: Tahoma, "Segoe UI", 'Inter', "Noto Sans Arabic", sans-serif;
+        }
+        #magicLine:hover {
+            cursor: pointer;
+            text-shadow: 0 0 5px rgba(129, 140, 248, 0.5); /* glow effect */
         }
     </style>
 </head>
@@ -404,23 +417,21 @@
             <span id="statusMessage" class="text-yellow-400">در حال احراز هویت...</span>
         </div>
 
-        <!-- 1. Secret Word Screen -->
-        <div id="secretWordScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
-            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">گفتگوی مخفی</h1>
-            <p class="mb-8 text-gray-400">برای باز شدن صفحه چت، شما و دوستتان باید دقیقاً یک کلمه رمز مشترک را وارد کنید.</p>
+        <!-- 1. Secret Entry Screen -->
+        <div id="secretEntryScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
+            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">گفتگوی عمومی (ورود سریع)</h1>
+            <p class="mb-8 text-gray-400">برای ورود، نیازی به کلمه رمز نیست. فقط یک حرکت سریع لازم است...</p>
             
             <div class="w-full max-w-sm">
-                <input type="text" id="secretWordInput" placeholder="کلمه رمز مشترک را اینجا وارد کنید..."
-                       class="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-lg text-center"
-                       required>
-                <button id="enterChatButton" disabled 
-                        class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01] opacity-50 cursor-not-allowed disabled:opacity-50 disabled:cursor-not-allowed">
-                    ورود به گفتگوی رمزی
-                </button>
+                <!-- NEW: Clickable line for secret entry -->
+                <p id="magicLine" class="text-xl font-mono text-indigo-400 p-4 border border-indigo-500 rounded-lg transition duration-150 hover:bg-gray-700 select-none">
+                    روی این خط سه بار سریع کلیک کنید تا وارد چت شوید.
+                </p>
+                <!-- END NEW -->
             </div>
-            <!-- Added specific hint about security rules here -->
-            <p class="mt-8 text-sm text-gray-500">توجه: این کلمه رمز باید دقیقاً برای هر دو نفر یکسان باشد.</p>
-            <p class="mt-2 text-xs text-red-400/80">اگر پس از زدن دکمه ورود، خطا دریافت کردید، احتمالاً قوانین امنیتی Firestore دسترسی را مسدود کرده‌اند. (allow read, write: if request.auth != null;)</p>
+            
+            <p class="mt-8 text-sm text-gray-500">این اتاق چت عمومی است و همه کاربران می‌توانند وارد شوند.</p>
+            <p class="mt-2 text-xs text-red-400/80">اگر پس از ورود، پیام‌ها بارگیری نشدند، لطفاً قوانین امنیتی Firestore را برای مسیر public/data/secret_chats/ به گونه‌ای تنظیم کنید که allow read, write: if request.auth != null; باشد.</p>
         </div>
 
         <!-- 2. Chat Screen -->
