@@ -82,6 +82,7 @@
         
         let firebaseConfig;
         try {
+            // تلاش برای استفاده از پیکربندی محیطی
             if (typeof __firebase_config !== 'undefined' && __firebase_config.length > 5) {
                 firebaseConfig = JSON.parse(__firebase_config);
             } else {
@@ -138,16 +139,16 @@
          */
         async function initializeFirebase() {
             try {
-                setLogLevel('error');
+                setLogLevel('error'); // فقط خطاهای مهم را نمایش بده
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
                 document.getElementById('auth-status').textContent = 'در حال احراز هویت...';
 
-                // ** گام اول: تنظیم شنونده برای ثبت وضعیت احراز هویت **
+                // ** گام اول: تنظیم شنونده برای ثبت وضعیت احراز هویت نهایی **
                 onAuthStateChanged(auth, (user) => {
-                    isAuthReady = true; // این همیشه اجرا می‌شود و برنامه را از حالت "هنگ" خارج می‌کند
+                    isAuthReady = true; 
                     if (user) {
                         currentUserId = user.uid;
                         document.getElementById('auth-status').textContent = 'اتصال برقرار است | Room: ' + currentRoomId + ' | User ID: ' + user.uid.substring(0, 8) + '...';
@@ -156,27 +157,39 @@
                     } else {
                         currentUserId = null;
                         document.getElementById('auth-status').textContent = 'احراز هویت ناموفق.';
-                        showStatus("احراز هویت ناموفق. لطفاً مجدداً صفحه را بارگذاری کنید.", 'error');
+                        showStatus("احراز هویت ناموفق (خطا در اتصال یا قوانین امنیتی).", 'error');
                     }
                 });
                 
-                // ** گام دوم: تلاش برای ورود به سیستم با محافظ try/catch **
-                try {
-                    if (initialAuthToken) {
+                // ** گام دوم: تلاش برای ورود به سیستم **
+                let signedIn = false;
+                
+                // 1. تلاش با توکن سفارشی (اولویت محیطی)
+                if (initialAuthToken) {
+                    try {
                         await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
+                        signedIn = true;
+                    } catch (tokenError) {
+                        // اگر توکن سفارشی نامعتبر بود، به تلاش بعدی می‌رویم
+                        console.error("خطا در Custom Token، تلاش برای Anonymous sign-in:", tokenError);
+                        document.getElementById('auth-status').textContent = 'توکن نامعتبر، تلاش برای اتصال ناشناس...';
                     }
-                } catch (signError) {
-                    // اگر sign-in اولیه ناموفق بود (مثلاً توکن نامعتبر بود)، 
-                    // خطا را ثبت می‌کنیم اما منتظر onAuthStateChanged می‌مانیم تا وضعیت نهایی را مشخص کند.
-                    console.error("خطا در فرآیند sign-in اولیه:", signError);
+                }
+
+                // 2. اگر هنوز وارد نشده‌ایم، تلاش با احراز هویت ناشناس (فال‌بک نهایی)
+                if (!signedIn) {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (anonymousError) {
+                        console.error("خطا در signInAnonymously:", anonymousError);
+                        // اجازه می‌دهیم onAuthStateChanged وضعیت نهایی شکست را ثبت کند.
+                    }
                 }
 
             } catch (error) {
-                console.error("خطا در راه‌اندازی Firebase:", error);
-                isAuthReady = true; // اطمینان از خروج از حالت بارگذاری
-                showStatus("خطا در راه‌اندازی برنامه. لطفاً کنسول را بررسی کنید.", 'error');
+                console.error("خطا فاجعه‌بار در راه‌اندازی Firebase:", error);
+                isAuthReady = true; 
+                showStatus("خطا در راه‌اندازی برنامه. اطلاعات پیکربندی نامعتبر است.", 'error');
             }
         }
 
