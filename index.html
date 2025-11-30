@@ -17,18 +17,7 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Mock config */ };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // --- اصلاحیه: فعال‌سازی لاگ دیباگ فایربیس ---
-        setLogLevel('debug');
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        let currentUserId = null;
-        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
-
-        // DOM elements (Access the DOM after the script execution starts)
+        // DOM elements (Define them before the config check for immediate use)
         const secretWordScreen = document.getElementById('secretWordScreen');
         const chatScreen = document.getElementById('chatScreen');
         const enterChatButton = document.getElementById('enterChatButton');
@@ -39,6 +28,42 @@
         const roomNameDisplay = document.getElementById('roomNameDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const statusMessage = document.getElementById('statusMessage'); 
+
+
+        // --- اعتبار سنجی پیکربندی فایربیس (جدید برای رفع خطا) ---
+        // بررسی می‌کند که آیا حداقل projectId برای راه‌اندازی فایربیس وجود دارد یا خیر.
+        if (!firebaseConfig || !firebaseConfig.projectId) {
+            document.addEventListener('DOMContentLoaded', () => {
+                if (statusMessage) {
+                    // نمایش پیغام خطای واضح در رابط کاربری
+                    statusMessage.textContent = "خطای پیکربندی: سرویس Firebase فعال نیست. (کد: project-not-provided)";
+                    statusMessage.classList.remove('text-yellow-400');
+                    statusMessage.classList.add('text-red-400', 'font-bold');
+                }
+                if (enterChatButton) {
+                    // غیرفعال کردن دکمه برای جلوگیری از تلاش برای ورود
+                    enterChatButton.disabled = true;
+                    enterChatButton.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                console.error("CRITICAL: Firebase configuration is missing or invalid. Check if Firebase is enabled for this project. Error: auth/project-not-provided");
+            });
+            // جلوگیری از اجرای ادامه کد ماژول در صورت عدم اعتبار پیکربندی
+            // این از وقوع خطای Uncaught FirebaseError جلوگیری می‌کند.
+            return;
+        }
+
+        // --- ادامه اجرا با پیکربندی معتبر ---
+        
+        // فعال‌سازی لاگ دیباگ فایربیس
+        setLogLevel('debug');
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentUserId = null;
+        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
@@ -57,9 +82,10 @@
         // تابع مدیریت احراز هویت
         const handleAuth = async () => {
             statusMessage.textContent = "در حال اتصال به سرور و احراز هویت...";
-            statusMessage.classList.remove('text-green-400', 'text-red-400');
+            statusMessage.classList.remove('text-green-400', 'text-red-400', 'font-bold');
             statusMessage.classList.add('text-yellow-400');
             enterChatButton.disabled = true;
+            enterChatButton.classList.add('opacity-50', 'cursor-not-allowed'); // مطمئن شویم غیرفعال است
 
             try {
                 if (initialAuthToken) {
@@ -72,9 +98,9 @@
             } catch (error) {
                 // اگر تمام تلاش‌ها شکست خورد
                 console.error("Authentication failed after retries:", error);
-                statusMessage.textContent = "خطا: اتصال ناموفق. لطفاً صفحه را رفرش کنید.";
+                statusMessage.textContent = "خطا: اتصال ناموفق. لطفاً صفحه را رفرش کنید. (کنسول را برای جزئیات خطا بررسی کنید)";
                 statusMessage.classList.remove('text-yellow-400');
-                statusMessage.classList.add('text-red-400');
+                statusMessage.classList.add('text-red-400', 'font-bold');
             }
         };
 
@@ -87,7 +113,7 @@
                 
                 // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
                 statusMessage.textContent = "متصل: آماده ورود به چت";
-                statusMessage.classList.remove('text-red-400', 'text-yellow-400');
+                statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
                 statusMessage.classList.add('text-green-400');
                 enterChatButton.disabled = false; // فعال کردن دکمه
                 enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -147,6 +173,7 @@
             const chatCollectionRef = collection(db, chatCollectionPath);
 
             // 3. Start listening for messages (onSnapshot)
+            // NOTE: We rely on in-memory sorting later to avoid Firestore index requirement issues.
             const messagesQuery = query(chatCollectionRef, orderBy('timestamp', 'asc'));
 
             unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
