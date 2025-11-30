@@ -151,7 +151,8 @@
         
         // These are required for the steganography logic
         const DECOY_TEXT_FULL = ""; 
-        const DECOY_PHRASE = "دانلود سریال جدید "; 
+        // ** تغییر عبارت فریبنده برای عمومی‌تر شدن **
+        const DECOY_PHRASE = "یک پیام عمومی حاوی اطلاعات "; 
         
         // Zero-Width Character Map
         const INVISIBLE_CHARS = {
@@ -318,7 +319,7 @@
 
         async function initializeFirebase() {
             if (!firebaseConfig) {
-                authStatus.textContent = "خطا: پیکربندی Firebase موجود نیست.";
+                authStatus.textContent = "خطا: پیکربندی Firebase موجود نیست. (لطفا Canvas را مجددا اجرا کنید.)";
                 return;
             }
             
