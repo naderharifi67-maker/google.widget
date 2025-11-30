@@ -145,32 +145,37 @@
                 
                 document.getElementById('auth-status').textContent = 'در حال احراز هویت...';
 
-                // احراز هویت با توکن سفارشی یا ناشناس
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // گرفتن شناسه کاربری پس از احراز هویت و شروع شنونده چت
+                // ** گام اول: تنظیم شنونده برای ثبت وضعیت احراز هویت **
                 onAuthStateChanged(auth, (user) => {
+                    isAuthReady = true; // این همیشه اجرا می‌شود و برنامه را از حالت "هنگ" خارج می‌کند
                     if (user) {
                         currentUserId = user.uid;
-                        isAuthReady = true; // احراز هویت کامل شد
                         document.getElementById('auth-status').textContent = 'اتصال برقرار است | Room: ' + currentRoomId + ' | User ID: ' + user.uid.substring(0, 8) + '...';
-                        // شروع شنونده پیام‌ها بلافاصله پس از احراز هویت
                         startChatListener(currentRoomId);
                         showStatus("اتصال با موفقیت برقرار شد. اکنون می‌توانید پیام ارسال کنید.", 'success');
                     } else {
                         currentUserId = null;
-                        isAuthReady = true; 
                         document.getElementById('auth-status').textContent = 'احراز هویت ناموفق.';
                         showStatus("احراز هویت ناموفق. لطفاً مجدداً صفحه را بارگذاری کنید.", 'error');
                     }
                 });
+                
+                // ** گام دوم: تلاش برای ورود به سیستم با محافظ try/catch **
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (signError) {
+                    // اگر sign-in اولیه ناموفق بود (مثلاً توکن نامعتبر بود)، 
+                    // خطا را ثبت می‌کنیم اما منتظر onAuthStateChanged می‌مانیم تا وضعیت نهایی را مشخص کند.
+                    console.error("خطا در فرآیند sign-in اولیه:", signError);
+                }
 
             } catch (error) {
                 console.error("خطا در راه‌اندازی Firebase:", error);
+                isAuthReady = true; // اطمینان از خروج از حالت بارگذاری
                 showStatus("خطا در راه‌اندازی برنامه. لطفاً کنسول را بررسی کنید.", 'error');
             }
         }
