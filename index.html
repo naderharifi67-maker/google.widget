@@ -245,7 +245,23 @@
             const messageInput = document.getElementById('messageInput');
             const plaintext = messageInput.value.trim();
 
-            if (!plaintext || !currentRoomId || !currentUserId) {
+            if (!plaintext) {
+                return; // پیام خالی ارسال نمی‌شود
+            }
+            
+            // بررسی آمادگی سرویس‌ها
+            if (!currentRoomId) {
+                showStatus("لطفاً ابتدا وارد اتاق چت شوید.", 'error');
+                return;
+            }
+            
+            if (!currentUserId) {
+                showStatus("در حال اتصال به سرویس هستید. لطفاً صبر کنید تا احراز هویت کامل شود.", 'error');
+                return;
+            }
+
+            if (!db) {
+                showStatus("سرویس پایگاه داده (Firebase) آماده نیست.", 'error');
                 return;
             }
 
@@ -262,9 +278,14 @@
                 
                 messageInput.value = ''; // پاک کردن ورودی
                 messageInput.focus();
+                
+                // پیام وضعیت را پنهان کنید اگر قبلا پیامی نمایش داده شده بود
+                document.getElementById('status-message').style.display = 'none';
+
             } catch (e) {
                 console.error("خطا در ارسال پیام:", e);
-                showStatus("خطا در ارسال پیام.", 'error');
+                // اگر خطای Firestore رخ دهد، یک پیام خطا به کاربر نمایش دهید
+                showStatus("خطا در ارسال پیام. مشکل اتصال یا دسترسی را بررسی کنید.", 'error');
             }
         }
 
