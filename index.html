@@ -17,8 +17,8 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Mock config */ };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // Disable logging in production (optional, for debugging)
-        setLogLevel('error');
+        // --- اصلاحیه: فعال‌سازی لاگ دیباگ فایربیس ---
+        setLogLevel('debug');
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
@@ -38,7 +38,7 @@
         const messagesContainer = document.getElementById('messagesContainer');
         const roomNameDisplay = document.getElementById('roomNameDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
-        const statusMessage = document.getElementById('statusMessage'); // اضافه کردن این خط
+        const statusMessage = document.getElementById('statusMessage'); 
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
@@ -47,20 +47,47 @@
                     return await fn();
                 } catch (error) {
                     if (i === retries - 1) throw error;
+                    // فقط ارور را در کنسول نمایش می دهیم و retry را لاگ نمی کنیم
+                    // console.warn(`Retry attempt ${i + 1} failed. Retrying in ${delay * Math.pow(2, i)}ms...`, error);
                     await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
                 }
             }
         };
 
+        // تابع مدیریت احراز هویت
+        const handleAuth = async () => {
+            statusMessage.textContent = "در حال اتصال به سرور و احراز هویت...";
+            statusMessage.classList.remove('text-green-400', 'text-red-400');
+            statusMessage.classList.add('text-yellow-400');
+            enterChatButton.disabled = true;
+
+            try {
+                if (initialAuthToken) {
+                    // 1. تلاش برای ورود با توکن کاستوم
+                    await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
+                } else {
+                    // 2. اگر توکن نبود یا شکست خورد، تلاش برای ورود ناشناس
+                    await fetchWithRetry(() => signInAnonymously(auth));
+                }
+            } catch (error) {
+                // اگر تمام تلاش‌ها شکست خورد
+                console.error("Authentication failed after retries:", error);
+                statusMessage.textContent = "خطا: اتصال ناموفق. لطفاً صفحه را رفرش کنید.";
+                statusMessage.classList.remove('text-yellow-400');
+                statusMessage.classList.add('text-red-400');
+            }
+        };
+
+
         // 1. Authentication Setup
-        onAuthStateChanged(auth, async (user) => {
+        onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUserId = user.uid;
                 userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
                 
-                // --- اصلاحیه مهم: فعال کردن دکمه و تنظیم پیام ---
+                // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
                 statusMessage.textContent = "متصل: آماده ورود به چت";
-                statusMessage.classList.remove('text-red-400');
+                statusMessage.classList.remove('text-red-400', 'text-yellow-400');
                 statusMessage.classList.add('text-green-400');
                 enterChatButton.disabled = false; // فعال کردن دکمه
                 enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -68,30 +95,19 @@
                 
                 initializeEventListeners();
             } else {
-                // اگر هنوز احراز هویت نشده، تلاش برای ورود
-                statusMessage.textContent = "در حال اتصال به سرور...";
-                statusMessage.classList.remove('text-green-400');
-                statusMessage.classList.add('text-yellow-400');
-
-                try {
-                    if (initialAuthToken) {
-                        await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
-                    } else {
-                        await fetchWithRetry(() => signInAnonymously(auth));
-                    }
-                } catch (error) {
-                    console.error("Authentication failed:", error);
-                    // Inform the user on the screen if auth fails completely
-                    statusMessage.textContent = "خطا: اتصال ناموفق. لطفاً صفحه را رفرش کنید.";
-                    statusMessage.classList.remove('text-yellow-400');
-                    statusMessage.classList.add('text-red-400');
-                    enterChatButton.disabled = true; // غیرفعال نگه داشتن دکمه
+                // اگر کاربر لاگین نیست، فرآیند لاگین را شروع کن.
+                // این تابع فقط یک بار در ابتدا یا پس از خروج فعال می شود.
+                if (!currentUserId) {
+                   handleAuth();
                 }
             }
         });
 
         // 2. Main Application Logic
         const initializeEventListeners = () => {
+            // مطمئن شوید event listeners فقط یک بار اضافه می شوند
+            if (enterChatButton.hasAttribute('data-listeners-attached')) return;
+            
             enterChatButton.addEventListener('click', handleEnterChat);
             secretWordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleEnterChat();
@@ -100,6 +116,7 @@
             messageInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleSendMessage();
             });
+            enterChatButton.setAttribute('data-listeners-attached', 'true');
         };
 
         const sanitizeChatRoomId = (word) => {
@@ -112,6 +129,10 @@
             if (secretWord.length < 3) {
                 alertUser("کلمه رمز باید حداقل ۳ حرف باشد.");
                 return;
+            }
+            if (!currentUserId) {
+                 alertUser("خطا: اتصال به سرور هنوز کامل نشده است. لطفا چند لحظه صبر کنید.");
+                 return;
             }
 
             // Unsubscribe from any previous listener if switching rooms
@@ -137,7 +158,8 @@
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
                 console.error("Error listening to messages: ", error);
-                alertUser("خطا در بارگذاری پیام‌ها. مطمئن شوید کلمه رمز صحیح است.");
+                // این خطا اغلب به دلیل عدم مجوز فایربیس است
+                alertUser("خطا در بارگذاری پیام‌ها. (احتمالاً مشکل مجوز دسترسی). جزئیات را در کنسول مرورگر ببینید.");
             });
 
             // Update UI
