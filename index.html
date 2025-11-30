@@ -86,7 +86,11 @@
         
         // تنظیمات فایربیس و متغیرهای سراسری
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        
+        // تعریف یک تنظیمات پیش‌فرض معتبر برای فایربیس در صورت عدم وجود تنظیمات محیطی
+        const defaultFirebaseConfig = { projectId: 'default-secret-chat-project' };
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' && __firebase_config.length > 2 ? __firebase_config : JSON.stringify(defaultFirebaseConfig));
+        
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
@@ -248,7 +252,7 @@
          */
         async function initializeFirebase() {
             try {
-                // setLogLevel('Debug'); // فعال‌سازی لاگ‌های دیباگ فایربیس
+                setLogLevel('error'); // تنظیم سطح لاگ به "error" برای کاهش نویز در کنسول
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -326,6 +330,7 @@
                 unsubscribeFromChat(); // قطع اتصال قبلی اگر وجود داشت
             }
             
+            // مسیر کالکشن باید بر اساس appId و roomId باشد
             const messagesRef = collection(db, `/artifacts/${appId}/public/data/secret_chats/${roomId}/messages`);
             const q = query(messagesRef, orderBy("timestamp", "desc")); // گرفتن جدیدترین پیام‌ها ابتدا
             
