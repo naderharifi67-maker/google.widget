@@ -3,542 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ابزار پیام‌رسان پنهان</title>
-    <!-- Tailwind CSS CDN -->
+    <title>تابلوی پیام اشتراکی</title>
+    <!-- بارگذاری Tailwind CSS برای استایل‌دهی آسان و مدرن -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDK Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, onSnapshot, collection, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // Expose Firebase modules to the global scope for use in the main script
-        window.firebase = {
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-            getFirestore, doc, addDoc, onSnapshot, collection, query, orderBy, serverTimestamp,
-            setLogLevel
-        };
-    </script>
+    <!-- بارگذاری فونت Inter (و تلاش برای استفاده از فونت‌های سیستمی فارسی) -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body {
-            font-family: 'Vazirmatn', sans-serif;
-            background-color: #1a1a2e;
-            color: #e4e4e7;
+            font-family: 'Inter', Tahoma, Arial, "Helvetica Neue", Helvetica, sans-serif;
+            background-color: #f3f4f6; /* پس‌زمینه خاکستری روشن */
         }
-        .chat-container {
-            background-color: #2c2c54;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            max-height: 90vh;
+        /* استایل سفارشی برای نوار پیام‌ها که قابلیت اسکرول داشته باشد */
+        #messages-container {
+            max-height: 70vh; /* حداکثر ارتفاع ۷۰٪ ویوپورت */
+            overflow-y: auto; /* فعال کردن اسکرول عمودی */
+            padding-left: 0.5rem; /* پدینگ برای زیبایی اسکرول‌بار */
         }
-        .chat-messages {
-            height: calc(90vh - 200px); /* Adjust based on input area height */
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column-reverse; /* Latest message at the bottom */
-        }
-        .chat-bubble {
-            max-width: 80%;
-            padding: 8px 12px;
-            border-radius: 18px;
-            word-wrap: break-word;
-        }
-        .self-message {
-            background-color: #5d5d8e; /* User's own message */
-            align-self: flex-end;
-            margin-left: auto;
-        }
-        .other-message {
-            background-color: #4b4b7a; /* Other user's message */
-            align-self: flex-start;
-            margin-right: auto;
-        }
-        textarea, input[type="text"] {
-            background-color: #3b3b6b;
-            border-color: #5d5d8e;
-            color: #e4e4e7;
-        }
-        /* Style for the revealed secret */
-        .secret-reveal {
-             background-color: #0d322c;
-             border: 1px dashed #a7f3d0;
-             color: #a7f3d0;
-             font-weight: 700;
-             padding: 6px;
-             margin-top: 4px;
-             font-size: 0.9rem;
-        }
-        /* Custom scrollbar for dark theme */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #2c2c54;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #5d5d8e;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #7a7ab3;
+        /* استایل برای خود پیام‌ها */
+        .message-bubble {
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
         }
     </style>
 </head>
-<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
+<body>
 
-    <div class="w-full max-w-2xl chat-container p-4 md:p-6 rounded-xl space-y-4 flex flex-col">
-        <h1 class="text-2xl md:text-3xl font-bold text-center text-indigo-300 border-b border-indigo-700 pb-3">
-            پیام‌رسان پنهان 💬
-        </h1>
-        
-        <!-- User ID & Status -->
-        <div class="text-center text-sm mb-4">
-            <p id="authStatus" class="text-yellow-400">... در حال اتصال</p>
-            <p class="text-xs mt-1 text-gray-400">شناسه شما: <span id="currentUserId" class="font-mono text-xs">در حال بارگذاری</span></p>
-        </div>
+    <div class="max-w-4xl mx-auto p-4 md:p-8">
+        <!-- عنوان اصلی -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-800">✉️ تابلوی پیام عمومی</h1>
+            <p class="text-gray-500 mt-2">پیامی بنویسید تا همه کسانی که این صفحه را باز می‌کنند، آن را به صورت لحظه‌ای ببینند.</p>
+        </header>
 
-        <!-- Key Input -->
-        <div class="space-y-2 border-4 border-yellow-500 rounded-xl p-3 bg-yellow-900/20">
-            <label for="keywordInput" class="block text-lg font-bold text-yellow-300">
-                پارامتر:
-            </label>
-            <input type="text" id="keywordInput" value="secret" placeholder="پارامتر پردازش را وارد کنید"
-                   class="w-full p-2 rounded-lg border-2 text-base font-mono text-center border-yellow-500 focus:ring-yellow-400 focus:border-yellow-400 text-white transition duration-150">
-        </div>
-
-        <!-- Chat Messages Area -->
-        <div id="chatMessages" class="chat-messages p-2 space-y-4 mb-4">
-            <p class="text-center text-gray-500 pt-8">پیام‌ها در اینجا نمایش داده می‌شوند.</p>
+        <!-- وضعیت اتصال و شناسه کاربری -->
+        <div id="status-bar" class="text-center mb-4 p-2 bg-indigo-100 text-indigo-700 rounded-lg shadow-sm hidden">
+            <span id="auth-status">در حال اتصال...</span>
+            <span class="inline-block mx-2">|</span>
+            <span id="user-id-display" class="text-sm font-mono">شناسه کاربری: ---</span>
         </div>
         
-        <!-- Input Area -->
-        <div class="border-t border-indigo-700 pt-4 space-y-2">
-             <!-- Real Input Text Area (Handles user input, transparent, exactly layered) -->
-             <div class="relative">
-                <!-- 1. Decoy Text Area (Always visible, shows the decoy text, read-only) -->
-                <textarea id="decoyInputText" rows="2" readonly 
-                          placeholder="پیام خود را اینجا وارد کنید..."
-                          class="w-full p-3 rounded-lg border-2 resize-none transition duration-150 border-gray-600 bg-gray-700/50 text-gray-400"></textarea>
-
-                <!-- 2. Real Input Text Area (Handles user input, transparent, exactly layered) -->
-                <textarea id="realInputText" rows="2" 
-                          placeholder="" 
-                          class="absolute top-0 left-0 w-full h-full p-3 rounded-lg border-2 resize-none focus:outline-none focus:border-green-500" 
-                          style="caret-color: white; color: transparent; background: transparent;"></textarea>
-            </div>
-            
-            <button id="sendBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl text-lg transition duration-150">
-                ارسال پیام (تولید)
-            </button>
+        <!-- کانتینر پیام‌ها -->
+        <div id="messages-container" class="bg-white rounded-xl shadow-lg p-4 mb-6 border border-gray-200">
+            <!-- پیام‌ها به صورت پویا در اینجا بارگذاری می‌شوند -->
+            <p id="loading-message" class="text-center text-gray-400 p-4">در حال بارگذاری پیام‌ها...</p>
         </div>
-        
-        <!-- Alert Message -->
-        <div id="alertMessage" class="hidden text-center p-3 rounded-lg bg-indigo-800 text-indigo-100 font-medium transition duration-300" role="alert">
-            عملیات موفقیت آمیز بود!
+
+        <!-- فرم ارسال پیام -->
+        <div class="bg-white p-4 md:p-6 rounded-xl shadow-2xl border border-indigo-200">
+            <form id="message-form" class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 rtl:space-x-reverse">
+                <input
+                    type="text"
+                    id="message-input"
+                    placeholder="پیام خود را اینجا بنویسید..."
+                    required
+                    maxlength="500"
+                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-base transition duration-150"
+                    aria-label="ورودی پیام جدید"
+                >
+                <button
+                    type="submit"
+                    id="send-button"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled
+                >
+                    ارسال پیام
+                </button>
+            </form>
+            <p id="error-message" class="text-red-500 mt-2 text-sm hidden">خطا در ارسال پیام. لطفاً دوباره تلاش کنید.</p>
         </div>
     </div>
 
+    <!-- اسکریپت‌های Firebase -->
     <script type="module">
-        // Global variables provided by the canvas environment
+        // وارد کردن ماژول‌های لازم از Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // تنظیمات عمومی Firebase (توسط محیط کاری فراهم می‌شود)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        // --- CONSTANTS ---
-        const KEYWORD_STORAGE_KEY = 'vigenere_param';
-        const CHAT_COLLECTION_PATH = `/artifacts/${appId}/public/data/chat_messages`;
-        
-        // These are required for the steganography logic
-        const DECOY_TEXT_FULL = ""; 
-        // ** تغییر عبارت فریبنده برای عمومی‌تر شدن **
-        const DECOY_PHRASE = "یک پیام عمومی حاوی اطلاعات "; 
-        
-        // Zero-Width Character Map
-        const INVISIBLE_CHARS = {
-            '00': '\u200B', '01': '\u200C', 
-            '10': '\u200D', '11': '\uFEFF',
-        };
-        const VISIBLE_BITS = {
-            '\u200B': '00', '\u200C': '01',
-            '\u200D': '10', '\uFEFF': '11',
-        };
 
-        // --- Element References ---
-        const realInputText = document.getElementById('realInputText'); 
-        const decoyInputText = document.getElementById('decoyInputText'); 
-        const keywordInput = document.getElementById('keywordInput'); 
-        const sendBtn = document.getElementById('sendBtn');
-        const chatMessagesDiv = document.getElementById('chatMessages');
-        const alertMessage = document.getElementById('alertMessage');
-        const authStatus = document.getElementById('authStatus');
-        const currentUserIdSpan = document.getElementById('currentUserId');
-        
-        // --- FIREBASE GLOBALS ---
-        let app;
-        let db;
-        let auth;
-        let currentUserId = null;
-        let messageRevealTimers = {}; // To manage auto-hide timers for individual messages
+        let db, auth, userId = null;
+        const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
 
-        // --- Utility Functions ---
-        
-        function getUserIdDisplay(id) {
-            // This is the full user ID as required for multi-user apps
-            return id; 
-        }
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const messagesContainer = document.getElementById('messages-container');
+        const loadingMessage = document.getElementById('loading-message');
+        const authStatus = document.getElementById('auth-status');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const errorElement = document.getElementById('error-message');
+        const statusBar = document.getElementById('status-bar');
 
-        function showAlert(message, duration = 3000) {
-            alertMessage.textContent = message;
-            alertMessage.classList.remove('hidden', 'bg-indigo-800', 'bg-red-800', 'bg-green-800');
-            let bgColor = 'bg-indigo-800'; 
-            if (message.includes('خطا') || message.includes('❌')) {
-                bgColor = 'bg-red-800';
-            } else if (message.includes('موفق')) {
-                bgColor = 'bg-green-800';
+        // فعال کردن لاگ‌های دیباگ
+        // setLogLevel('debug'); 
+
+        // --- توابع کمکی ---
+
+        // تابع برای تبدیل زمان‌بندی Firebase به یک رشته قابل خواندن (خورشیدی نیست، اما قالب‌بندی شده است)
+        function formatTimestamp(timestamp) {
+            if (timestamp && timestamp.toDate) {
+                const date = timestamp.toDate();
+                const options = { 
+                    year: 'numeric', month: 'short', day: 'numeric', 
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', 
+                    hour12: false 
+                };
+                return date.toLocaleDateString('fa-IR', options);
             }
-            alertMessage.classList.add(bgColor);
-            clearTimeout(alertMessage.timer);
-            alertMessage.timer = setTimeout(() => {
-                alertMessage.classList.add('hidden');
-            }, duration);
+            return 'همین الان';
         }
 
-        // --- Steganography & Cipher Functions (Vigenere + Zero-Width) ---
-
-        function b64EncodeUnicode(str) {
-            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-                function(match, p1) {
-                    return String.fromCharCode('0x' + p1);
-                }));
-        }
-
-        function b64DecodeUnicode(str) {
-            return decodeURIComponent(atob(str).split('').map(function(c) {
-                return '%' + ('00' + c.codePointAt(0).toString(16)).slice(-2);
-            }).join(''));
-        }
-
-        function encodeToInvisible(text) {
-            let binary = '';
-            for (let i = 0; i < text.length; i++) {
-                let byte = text.codePointAt(i);
-                binary += byte.toString(2).padStart(8, '0');
-            }
-            let invisible = '';
-            for (let i = 0; i < binary.length; i += 2) {
-                const quad = binary.substring(i, i + 2);
-                if (quad.length === 2) {
-                    invisible += INVISIBLE_CHARS[quad];
-                }
-            }
-            return invisible;
-        }
-
-        function decodeFromInvisible(invisibleText) {
-            let binary = '';
-            for (let i = 0; i < invisibleText.length; i++) {
-                const char = invisibleText[i];
-                if (VISIBLE_BITS[char]) {
-                    binary += VISIBLE_BITS[char];
-                }
-            }
-            let resultText = '';
-            for (let i = 0; i < binary.length; i += 8) {
-                const byteString = binary.substring(i, i + 8);
-                if (byteString.length === 8) {
-                    const charCode = parseInt(byteString, 2);
-                    resultText += String.fromCodePoint(charCode);
-                }
-            }
-            return resultText;
-        }
-
-        function vigenereCipher(text, keyword, decrypt = false) {
-            let result = '';
-            const CLEANED_KEYWORD = keyword.trim();
-            if (CLEANED_KEYWORD.length === 0) return text; 
-            const KEYWORD_LENGTH = CLEANED_KEYWORD.length;
-
-            for (let i = 0, j = 0; i < text.length; i++, j++) {
-                let keyCharIndex = j % KEYWORD_LENGTH;
-                let keyChar = CLEANED_KEYWORD.codePointAt(keyCharIndex);
-                if (keyChar > 0xFFFF) j++; 
-                
-                let textChar = text.codePointAt(i);
-                if (textChar > 0xFFFF) i++; 
-                
-                let shift = decrypt ? -keyChar : keyChar;
-                let newCodePoint = textChar + shift;
-                
-                result += String.fromCodePoint(newCodePoint);
-            }
-            return result;
-        }
-        
-        function decryptMessageContent(covertData, keyword) {
-            try {
-                if (covertData.length === 0) throw new Error("داده مخفی خالی است.");
-                if (keyword.trim() === "") throw new Error("پارامتر نامعتبر.");
-
-                // 1. Decode invisible ZW-chars back to Base64 ASCII string
-                const base64Cipher = decodeFromInvisible(covertData);
-
-                // 2. Base64 Decode the string to get the RAW Vigenere cipher text
-                const realCipher = b64DecodeUnicode(base64Cipher);
-
-                // 3. Decrypt the real cipher text
-                const decryptedText = vigenereCipher(realCipher, keyword, true); 
-                
-                return decryptedText;
-            } catch (e) {
-                console.error("Decryption Error:", e);
-                return `❌ خطا در رمزگشایی: ${e.message}`;
-            }
-        }
-
-
-        // --- Decoy Display Management ---
-        
-        function updateDecoyDisplay() {
-            const realLength = realInputText.value.length;
-            if (realLength === 0) {
-                decoyInputText.value = '';
-                decoyInputText.placeholder = 'پیام خود را اینجا وارد کنید...';
+        // تابع برای رندر کردن یک لیست از پیام‌ها
+        function renderMessages(messages) {
+            messagesContainer.innerHTML = ''; // پاک کردن پیام‌های قبلی
+            if (messages.length === 0) {
+                messagesContainer.innerHTML = '<p class="text-center text-gray-400 p-4">هنوز پیامی ارسال نشده است. اولین پیام را شما بنویسید!</p>';
                 return;
             }
-            
-            const repeatCount = Math.ceil(realLength / DECOY_PHRASE.length) + 1;
-            let decoyDisplay = DECOY_PHRASE.repeat(repeatCount).substring(0, realLength);
-            
-            decoyInputText.value = decoyDisplay;
-            decoyInputText.scrollTop = realInputText.scrollTop;
+
+            // پیمایش پیام‌ها و ایجاد حباب‌های پیام
+            messages.forEach(msg => {
+                const isMine = msg.userId === userId;
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message-bubble p-3 rounded-xl mb-3 max-w-[90%] md:max-w-[75%] transition duration-300 ${isMine ? 'bg-indigo-500 text-white ml-auto' : 'bg-gray-100 text-gray-800 mr-auto'}`;
+                
+                // اطلاعات کاربر
+                const userSpan = document.createElement('span');
+                userSpan.className = `font-bold text-xs ${isMine ? 'text-indigo-200' : 'text-indigo-600'}`;
+                userSpan.textContent = isMine ? 'شما' : `کاربر: ${msg.userId.substring(0, 8)}...`;
+                
+                // محتوای پیام
+                const contentP = document.createElement('p');
+                contentP.className = 'text-sm mt-1 mb-2 whitespace-pre-wrap';
+                contentP.textContent = msg.text;
+
+                // زمان ارسال
+                const timeSpan = document.createElement('span');
+                timeSpan.className = `block text-xs text-opacity-75 ${isMine ? 'text-white' : 'text-gray-500'} text-left`;
+                timeSpan.textContent = formatTimestamp(msg.timestamp);
+
+                messageDiv.appendChild(userSpan);
+                messageDiv.appendChild(contentP);
+                messageDiv.appendChild(timeSpan);
+                messagesContainer.appendChild(messageDiv);
+            });
+
+            // اسکرول به پایین‌ترین پیام
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // --- Firebase Handlers ---
+        // --- توابع Firebase و منطق برنامه ---
 
         async function initializeFirebase() {
-            if (!firebaseConfig) {
-                authStatus.textContent = "خطا: پیکربندی Firebase موجود نیست. (لطفا Canvas را مجددا اجرا کنید.)";
-                return;
-            }
-            
             try {
-                // setLogLevel('debug'); // Enable for debugging
-                app = firebase.initializeApp(firebaseConfig);
-                db = firebase.getFirestore(app);
-                auth = firebase.getAuth(app);
-
-                // Handle Authentication
-                authStatus.textContent = "در حال احراز هویت...";
+                authStatus.textContent = 'در حال راه‌اندازی Firebase...';
                 
-                if (initialAuthToken) {
-                    await firebase.signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await firebase.signInAnonymously(auth);
-                }
+                // 1. راه‌اندازی برنامه و سرویس‌ها
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-                firebase.onAuthStateChanged(auth, (user) => {
+                // 2. تنظیم شنونده تغییر وضعیت احراز هویت بلافاصله پس از راه‌اندازی auth
+                // این کار تضمین می‌کند که getAuth() با موفقیت اجرا شده است و خطا برطرف می‌شود.
+                onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        currentUserId = user.uid;
-                        currentUserIdSpan.textContent = getUserIdDisplay(currentUserId);
-                        authStatus.textContent = "✅ متصل";
-                        setupRealtimeListener();
+                        // کاربر احراز هویت شده است
+                        userId = user.uid;
+                        userIdDisplay.textContent = `شناسه کاربری: ${userId.substring(0, 8)}...`;
+                        authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
+                        sendButton.disabled = false;
+                        setupRealtimeListener(); // شروع گوش دادن به پیام‌ها
                     } else {
-                        currentUserId = null;
-                        currentUserIdSpan.textContent = "ناشناس";
-                        authStatus.textContent = "❌ قطع اتصال";
+                        // در انتظار یا عدم احراز هویت (در صورت عدم استفاده از initialAuthToken)
+                        userId = null;
+                        authStatus.textContent = 'لطفاً صبر کنید...';
+                        sendButton.disabled = true;
                     }
                 });
-                
-            } catch (e) {
-                authStatus.textContent = `خطا در اتصال: ${e.message}`;
-                console.error("Firebase Initialization Error:", e);
-            }
-        }
-        
-        async function sendMessage() {
-            if (!currentUserId) {
-                showAlert("❌ ابتدا باید متصل شوید.", 4000);
-                return;
-            }
-            
-            const realMessage = realInputText.value.trim();
-            const keyword = keywordInput.value;
 
-            if (keyword.trim() === "") {
-                showAlert("خطا: پارامتر لازم است.", 4000);
-                return;
-            }
-            if (realMessage === "") {
-                 showAlert("خطا: پیام لازم است.", 3000);
-                return;
-            }
+                // 3. تلاش برای احراز هویت با توکن سفارشی یا به صورت ناشناس
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
 
-            try {
-                // 1. Vigenere Encrypt (Raw Unicode string)
-                const realCipher = vigenereCipher(realMessage, keyword, false);
-                
-                // 2. Base64 Encode the RAW cipher (ASCII-safe string)
-                const base64Cipher = b64EncodeUnicode(realCipher);
+                authStatus.textContent = 'احراز هویت موفقیت‌آمیز.';
+                statusBar.classList.remove('hidden');
 
-                // 3. Convert Base64 string to a completely invisible string of Zero-Width characters
-                const invisibleCipher = encodeToInvisible(base64Cipher);
-
-                // 4. Construct the final output
-                const finalOutput = DECOY_TEXT_FULL + invisibleCipher;
-                
-                // 5. Save to Firestore
-                await firebase.addDoc(firebase.collection(db, CHAT_COLLECTION_PATH), {
-                    senderId: currentUserId,
-                    timestamp: firebase.serverTimestamp(),
-                    covertData: finalOutput,
-                    // Store the visible part length to help frontend rendering (optional, but good practice)
-                    visibleLength: realMessage.length 
-                });
-
-                // Clear input fields
-                realInputText.value = ''; 
-                decoyInputText.value = '';
-                
-                showAlert("پیام با موفقیت ارسال شد.", 3000);
-
-            } catch (e) {
-                showAlert(`خطا در ارسال پیام: ${e.message}`, 7000);
-                console.error("Send Message Error:", e);
+            } catch (error) {
+                console.error("خطا در راه‌اندازی Firebase یا احراز هویت:", error);
+                authStatus.textContent = 'خطا در اتصال: ' + error.message;
             }
         }
 
         function setupRealtimeListener() {
-            if (!db || !currentUserId) return;
+            if (!db || !userId) return;
 
-            const q = firebase.query(
-                firebase.collection(db, CHAT_COLLECTION_PATH),
-                firebase.orderBy('timestamp', 'desc') // Get latest first
+            // ساخت کوئری: گرفتن مجموعه پیام‌ها و مرتب‌سازی بر اساس زمان ارسال
+            const messagesQuery = query(
+                collection(db, messagesCollectionPath),
+                orderBy('timestamp', 'asc')
             );
-
-            // Listen for real-time updates
-            firebase.onSnapshot(q, (snapshot) => {
-                chatMessagesDiv.innerHTML = ''; // Clear existing messages (simplest way to re-render)
-                
-                // Filter and process new messages
+            
+            // گوش دادن به تغییرات در لحظه
+            const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+                loadingMessage.remove();
                 const messages = [];
                 snapshot.forEach(doc => {
                     messages.push({ id: doc.id, ...doc.data() });
                 });
-
-                if (messages.length === 0) {
-                    chatMessagesDiv.innerHTML = '<p class="text-center text-gray-500 pt-8">پیام‌ها در اینجا نمایش داده می‌شوند.</p>';
-                    return;
-                }
-
-                messages.forEach(message => {
-                    const messageElement = createMessageElement(message);
-                    chatMessagesDiv.appendChild(messageElement);
-                });
-                
-                // Keep the scroll at the bottom (due to flex-direction: column-reverse)
-                chatMessagesDiv.scrollTop = 0;
+                renderMessages(messages);
             }, (error) => {
-                console.error("Firestore Listen Error:", error);
-                showAlert("خطا در دریافت پیام‌ها.", 5000);
+                console.error("خطا در دریافت لحظه‌ای پیام‌ها:", error);
+                messagesContainer.innerHTML = `<p class="text-center text-red-500 p-4">خطا در بارگذاری پیام‌ها: ${error.message}</p>`;
             });
-        }
-        
-        function createMessageElement(message) {
-            const isSelf = message.senderId === currentUserId;
-            const messageWrapper = document.createElement('div');
-            messageWrapper.className = `flex mb-4 ${isSelf ? 'justify-end' : 'justify-start'} w-full`;
-            
-            // Determine the decoy text length based on the encoded data
-            const invisibleCipherLength = message.covertData.length;
-            const repeatCount = Math.ceil(message.visibleLength / DECOY_PHRASE.length) + 1;
-            const decoyText = DECOY_PHRASE.repeat(repeatCount).substring(0, message.visibleLength || 20) + '...'; // Add ... for visual cue
 
-            // Format timestamp if available
-            let timeStr = '';
-            if (message.timestamp && message.timestamp.toDate) {
-                const date = message.timestamp.toDate();
-                timeStr = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-            }
-
-            messageWrapper.innerHTML = `
-                <div class="flex flex-col max-w-xs sm:max-w-md w-full">
-                    <div class="text-xs ${isSelf ? 'text-gray-400 text-left' : 'text-yellow-300 text-right'} mb-1 px-3">
-                        ${isSelf ? `شما (${getUserIdDisplay(message.senderId)})` : getUserIdDisplay(message.senderId)}
-                    </div>
-                    <div id="bubble-${message.id}" class="chat-bubble ${isSelf ? 'self-message' : 'other-message'} cursor-pointer">
-                        <p class="text-white">${decoyText}</p>
-                        <div id="secret-${message.id}" class="secret-reveal hidden mt-2">...</div>
-                        <p class="text-xs ${isSelf ? 'text-gray-300' : 'text-gray-400'} mt-1 text-left">${timeStr}</p>
-                    </div>
-                </div>
-            `;
-            
-            const bubble = messageWrapper.querySelector(`#bubble-${message.id}`);
-            bubble.addEventListener('click', () => handleMessageClick(message.id, message.covertData));
-
-            return messageWrapper;
+            // برگرداندن تابع لغو اشتراک در صورت نیاز
+            return unsubscribe;
         }
 
-        function handleMessageClick(messageId, covertData) {
-            const secretDiv = document.getElementById(`secret-${messageId}`);
-            const keyword = keywordInput.value;
-            
-            // Clear any existing timer for this message
-            if (messageRevealTimers[messageId]) {
-                clearTimeout(messageRevealTimers[messageId]);
-                delete messageRevealTimers[messageId];
-            }
+        // تابع مدیریت ارسال پیام
+        document.getElementById('message-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
 
-            // Decrypt and display
-            const decryptedText = decryptMessageContent(covertData, keyword);
-            secretDiv.textContent = decryptedText;
-            secretDiv.classList.remove('hidden');
-
-            // Set auto-hide timer (5 seconds)
-            messageRevealTimers[messageId] = setTimeout(() => {
-                secretDiv.classList.add('hidden');
-                delete messageRevealTimers[messageId];
-            }, 5000); // 5 seconds delay
-        }
-
-
-        // --- Event Listeners and Initialization ---
-
-        window.onload = function() {
-            // Load key from local storage
-            const savedKeyword = localStorage.getItem(KEYWORD_STORAGE_KEY);
-            if (savedKeyword) {
-                keywordInput.value = savedKeyword;
-            } else {
-                localStorage.setItem(KEYWORD_STORAGE_KEY, keywordInput.value);
+            if (!text || !db || !userId) {
+                errorElement.textContent = 'متن پیام یا اتصال معتبر نیست.';
+                errorElement.classList.remove('hidden');
+                return;
             }
             
-            initializeFirebase();
+            errorElement.classList.add('hidden');
+            sendButton.disabled = true;
 
-            // Handle input events on the REAL input to update the visual decoy
-            realInputText.addEventListener('input', updateDecoyDisplay);
-            realInputText.addEventListener('scroll', () => {
-                 decoyInputText.scrollTop = realInputText.scrollTop;
-            });
+            const newMessage = {
+                text: text,
+                userId: userId, // شناسه کاربر برای نمایش "شما"
+                timestamp: serverTimestamp() // زمان‌بندی از سرور برای جلوگیری از خطا
+            };
 
-            // Send Button click
-            sendBtn.addEventListener('click', sendMessage);
+            try {
+                await addDoc(collection(db, messagesCollectionPath), newMessage);
+                messageInput.value = ''; // خالی کردن فیلد
+            } catch (error) {
+                console.error("خطا در ارسال پیام:", error);
+                errorElement.textContent = 'خطا در ارسال پیام. لطفاً دوباره تلاش کنید.';
+                errorElement.classList.remove('hidden');
+            } finally {
+                sendButton.disabled = false;
+            }
+        });
 
-            // Send on Enter key (not Shift+Enter)
-            realInputText.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault(); 
-                    sendMessage();
-                }
-            });
+        // --- شروع برنامه ---
 
-            // Save keyword to localStorage on every change
-            keywordInput.addEventListener('input', (e) => {
-                 localStorage.setItem(KEYWORD_STORAGE_KEY, e.target.value);
-            });
-        };
+        // شروع فرآیند راه‌اندازی
+        initializeFirebase();
+
     </script>
 </body>
 </html>
