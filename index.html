@@ -104,7 +104,7 @@
         const loadingMessage = document.getElementById('loading-message');
         const authStatus = document.getElementById('auth-status');
         const userIdDisplay = document.getElementById('user-id-display');
-        const statusBar = document.getElementById('status-bar'); // <-- اصلاح: تعریف متغیر statusBar
+        const statusBar = document.getElementById('status-bar'); 
         
         // عناصر جدید نمایش خطا
         const globalErrorDiv = document.getElementById('global-error');
@@ -187,6 +187,12 @@
             try {
                 authStatus.textContent = 'در حال راه‌اندازی Firebase...';
                 
+                // بررسی اعتبار پیکربندی Firebase قبل از راه‌اندازی
+                // اگر کانفیگ خالی باشد (مانند خطای قبلی)، یک خطای واضح‌تر نمایش داده شود.
+                if (!firebaseConfig || !firebaseConfig.projectId) {
+                    throw new Error("پیکربندی Firebase ناقص است. 'projectId' در داده‌های محیط کاری یافت نشد. این مشکل احتمالاً به دلیل عدم تنظیم متغیرهای محیطی است.");
+                }
+
                 // 1. راه‌اندازی برنامه و سرویس‌ها
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -199,7 +205,7 @@
                         userId = user.uid; // استفاده از شناسه واقعی Firebase
                         userIdDisplay.textContent = `شناسه کاربری: ${userId.substring(0, 8)}...`;
                         authStatus.textContent = 'متصل به سرور و احراز هویت شده.';
-                        statusBar.classList.remove('hidden'); // <-- در اینجا استفاده می‌شود
+                        statusBar.classList.remove('hidden'); 
                         sendButton.disabled = false;
                         globalErrorDiv.classList.add('hidden'); // پاک کردن خطای احراز هویت در صورت موفقیت
                         
@@ -225,7 +231,8 @@
             } catch (error) {
                 console.error("خطا در راه‌اندازی Firebase:", error);
                 authStatus.textContent = 'خطا در اتصال: ' + error.message;
-                displayGlobalError(`خطای احراز هویت (Auth): ${error.message}`); // نمایش خطای دقیق Auth
+                // نمایش خطای دقیق Auth
+                displayGlobalError(`خطای احراز هویت (Auth): ${error.message}`); 
             }
         }
 
