@@ -38,6 +38,7 @@
         const messagesContainer = document.getElementById('messagesContainer');
         const roomNameDisplay = document.getElementById('roomNameDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
+        const statusMessage = document.getElementById('statusMessage'); // اضافه کردن این خط
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
@@ -56,11 +57,22 @@
             if (user) {
                 currentUserId = user.uid;
                 userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
-                document.getElementById('statusMessage').textContent = "متصل: آماده ورود به چت"; // <--- خط اصلاح شده
-                // Now that we have a user ID, we can initialize the UI event listeners
+                
+                // --- اصلاحیه مهم: فعال کردن دکمه و تنظیم پیام ---
+                statusMessage.textContent = "متصل: آماده ورود به چت";
+                statusMessage.classList.remove('text-red-400');
+                statusMessage.classList.add('text-green-400');
+                enterChatButton.disabled = false; // فعال کردن دکمه
+                enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                // ------------------------------------------------
+                
                 initializeEventListeners();
             } else {
-                // If not signed in, sign in using the provided token or anonymously
+                // اگر هنوز احراز هویت نشده، تلاش برای ورود
+                statusMessage.textContent = "در حال اتصال به سرور...";
+                statusMessage.classList.remove('text-green-400');
+                statusMessage.classList.add('text-yellow-400');
+
                 try {
                     if (initialAuthToken) {
                         await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
@@ -70,7 +82,10 @@
                 } catch (error) {
                     console.error("Authentication failed:", error);
                     // Inform the user on the screen if auth fails completely
-                    document.getElementById('statusMessage').textContent = "خطا در اتصال به سرویس. لطفاً صفحه را رفرش کنید.";
+                    statusMessage.textContent = "خطا: اتصال ناموفق. لطفاً صفحه را رفرش کنید.";
+                    statusMessage.classList.remove('text-yellow-400');
+                    statusMessage.classList.add('text-red-400');
+                    enterChatButton.disabled = true; // غیرفعال نگه داشتن دکمه
                 }
             }
         });
@@ -256,7 +271,7 @@
         <!-- Status/User ID Display -->
         <div class="p-3 bg-gray-700 text-xs text-center border-b border-gray-600">
             <span id="userIdDisplay" class="text-gray-400">در حال اتصال...</span>
-            <span id="statusMessage" class="text-green-400"></span>
+            <span id="statusMessage" class="text-yellow-400">در حال احراز هویت...</span>
         </div>
 
         <!-- 1. Secret Word Screen -->
@@ -268,8 +283,8 @@
                 <input type="text" id="secretWordInput" placeholder="کلمه رمز مشترک را اینجا وارد کنید..."
                        class="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-lg text-center"
                        required>
-                <button id="enterChatButton"
-                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01]">
+                <button id="enterChatButton" disabled 
+                        class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01] opacity-50 cursor-not-allowed disabled:opacity-50 disabled:cursor-not-allowed">
                     ورود به گفتگوی رمزی
                 </button>
             </div>
