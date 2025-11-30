@@ -10,7 +10,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // توجه: orderBy از اینجا حذف شد و مرتب‌سازی در حافظه انجام می‌شود
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- GLOBAL FIREBASE VARIABLES (MANDATORY INJECTION) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -27,12 +28,22 @@
         const messagesContainer = document.getElementById('messagesContainer');
         const roomNameDisplay = document.getElementById('roomNameDisplay');
         const userIdDisplay = document.getElementById('userIdDisplay');
-        const statusMessage = document.getElementById('statusMessage'); 
-
-
+        const statusMessage = document.getElementById('statusMessage');
+        const goBackButton = document.getElementById('goBackButton'); // دکمه جدید
+        
+        // متغیرهای فایربیس با let تعریف می‌شوند تا بتوانند به صورت شرطی مقداردهی شوند
+        let app = null;
+        let db = null;
+        let auth = null;
+        let currentUserId = null;
+        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
+        
         // --- اعتبار سنجی پیکربندی فایربیس (جدید برای رفع خطا) ---
+        let isConfigValid = true;
+
         // بررسی می‌کند که آیا حداقل projectId برای راه‌اندازی فایربیس وجود دارد یا خیر.
         if (!firebaseConfig || !firebaseConfig.projectId) {
+            isConfigValid = false;
             document.addEventListener('DOMContentLoaded', () => {
                 if (statusMessage) {
                     // نمایش پیغام خطای واضح در رابط کاربری
@@ -47,26 +58,29 @@
                 }
                 console.error("CRITICAL: Firebase configuration is missing or invalid. Check if Firebase is enabled for this project. Error: auth/project-not-provided");
             });
-            // جلوگیری از اجرای ادامه کد ماژول در صورت عدم اعتبار پیکربندی
-            // این از وقوع خطای Uncaught FirebaseError جلوگیری می‌کند.
-            return;
         }
-
-        // --- ادامه اجرا با پیکربندی معتبر ---
         
-        // فعال‌سازی لاگ دیباگ فایربیس
-        setLogLevel('debug');
+        // --- ادامه اجرا با پیکربندی معتبر ---
+        if (isConfigValid) {
+            
+            // فعال‌سازی لاگ دیباگ فایربیس
+            setLogLevel('debug');
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        let currentUserId = null;
-        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
+            // Initialize Firebase
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } else {
+            // اگر پیکربندی نامعتبر باشد، اجرای منطق فایربیس متوقف می‌شود.
+            // نیازی به return نیست چون کد در بلوک if (isConfigValid) پیچیده شده است.
+        }
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
+            if (!db || !auth) {
+                 console.error("fetchWithRetry called when Firebase services are not initialized.");
+                 return;
+            }
             for (let i = 0; i < retries; i++) {
                 try {
                     return await fn();
@@ -81,6 +95,8 @@
 
         // تابع مدیریت احراز هویت
         const handleAuth = async () => {
+            if (!auth) return; // اطمینان از مقداردهی auth
+            
             statusMessage.textContent = "در حال اتصال به سرور و احراز هویت...";
             statusMessage.classList.remove('text-green-400', 'text-red-400', 'font-bold');
             statusMessage.classList.add('text-yellow-400');
@@ -106,29 +122,31 @@
 
 
         // 1. Authentication Setup
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUserId = user.uid;
-                userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
-                
-                // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
-                statusMessage.textContent = "متصل: آماده ورود به چت";
-                statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
-                statusMessage.classList.add('text-green-400');
-                enterChatButton.disabled = false; // فعال کردن دکمه
-                enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                // ------------------------------------------------
-                
-                initializeEventListeners();
-            } else {
-                // اگر کاربر لاگین نیست، فرآیند لاگین را شروع کن.
-                // این تابع فقط یک بار در ابتدا یا پس از خروج فعال می شود.
-                if (!currentUserId) {
-                   handleAuth();
+        if (auth) { // تنها در صورتی که auth مقداردهی شده باشد، شنونده را فعال کن
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
+                    
+                    // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
+                    statusMessage.textContent = "متصل: آماده ورود به چت";
+                    statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
+                    statusMessage.classList.add('text-green-400');
+                    enterChatButton.disabled = false; // فعال کردن دکمه
+                    enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    // ------------------------------------------------
+                    
+                    initializeEventListeners();
+                } else {
+                    // اگر کاربر لاگین نیست، فرآیند لاگین را شروع کن.
+                    // این تابع فقط یک بار در ابتدا یا پس از خروج فعال می شود.
+                    if (!currentUserId) {
+                       handleAuth();
+                    }
                 }
-            }
-        });
-
+            });
+        }
+        
         // 2. Main Application Logic
         const initializeEventListeners = () => {
             // مطمئن شوید event listeners فقط یک بار اضافه می شوند
@@ -142,7 +160,18 @@
             messageInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleSendMessage();
             });
+            goBackButton.addEventListener('click', handleGoBack); // رویداد جدید
+            
             enterChatButton.setAttribute('data-listeners-attached', 'true');
+        };
+
+        const handleGoBack = () => {
+            if (unsubscribe) {
+                unsubscribe(); // توقف گوش دادن به چت قبلی
+            }
+            chatScreen.classList.add('hidden');
+            secretWordScreen.classList.remove('hidden');
+            secretWordInput.focus();
         };
 
         const sanitizeChatRoomId = (word) => {
@@ -151,6 +180,11 @@
         }
 
         const handleEnterChat = () => {
+            if (!db) {
+                alertUser("خطا: اتصال به سرور ناموفق. لطفاً ابتدا خطای پیکربندی را بررسی کنید.");
+                return;
+            }
+
             const secretWord = secretWordInput.value.trim();
             if (secretWord.length < 3) {
                 alertUser("کلمه رمز باید حداقل ۳ حرف باشد.");
@@ -173,14 +207,30 @@
             const chatCollectionRef = collection(db, chatCollectionPath);
 
             // 3. Start listening for messages (onSnapshot)
-            // NOTE: We rely on in-memory sorting later to avoid Firestore index requirement issues.
-            const messagesQuery = query(chatCollectionRef, orderBy('timestamp', 'asc'));
+            // توجه: orderBy حذف شد تا از خطاهای ایندکس جلوگیری شود. مرتب‌سازی در حافظه انجام می‌شود.
+            const messagesQuery = query(chatCollectionRef); 
 
             unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
                 messagesContainer.innerHTML = ''; // Clear existing messages
+                
+                let messages = [];
                 snapshot.forEach((doc) => {
-                    displayMessage(doc.data());
+                    messages.push(doc.data());
                 });
+
+                // مرتب‌سازی در حافظه بر اساس timestamp (صعودی)
+                messages.sort((a, b) => {
+                    // تبدیل به میلی‌ثانیه برای مقایسه، با یک مقدار پیش‌فرض صفر برای داده‌های در حال نوشتن
+                    const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : 0;
+                    const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : 0;
+                    return timeA - timeB;
+                });
+                
+                // نمایش پیام‌های مرتب‌شده
+                messages.forEach((data) => {
+                    displayMessage(data);
+                });
+
                 // Scroll to the latest message
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
@@ -197,6 +247,8 @@
         };
 
         const handleSendMessage = async () => {
+            if (!db) return; // اطمینان از مقداردهی db
+
             const messageText = messageInput.value.trim();
             const secretWord = secretWordInput.value.trim();
 
@@ -235,6 +287,7 @@
             
             // Format timestamp for display (if available)
             let timeStr = '';
+            // بررسی می‌کنیم که آیا timestamp یک شیء Timestamp از فایربیس است که متد toDate را دارد
             if (data.timestamp && data.timestamp.toDate) {
                 const date = data.timestamp.toDate();
                 timeStr = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
@@ -344,8 +397,12 @@
         <div id="chatScreen" class="flex-grow flex flex-col hidden">
             
             <!-- Chat Header -->
-            <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md">
-                اتاق: <span id="roomNameDisplay">...</span>
+            <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md flex items-center justify-between">
+                <button id="goBackButton" class="text-sm bg-indigo-500 hover:bg-indigo-400 text-white py-1 px-3 rounded-md transition duration-200">
+                    <svg class="w-4 h-4 inline mr-1 transform rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    بازگشت
+                </button>
+                <span class="flex-grow text-center pr-24">اتاق: <span id="roomNameDisplay">...</span></span>
             </div>
 
             <!-- Messages List -->
