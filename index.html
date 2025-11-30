@@ -59,10 +59,6 @@
         let currentUserId = null;
         let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
         
-        // --- حذف اعتبار سنجی isConfigValid برای رفع خطای کاربر ---
-        
-        // --- ادامه اجرای برنامه با فرض اعتبار پیکربندی یا استفاده از پیکربندی ساختگی ---
-        
         // فعال‌سازی لاگ دیباگ فایربیس
         setLogLevel('debug');
 
@@ -74,10 +70,20 @@
 
         // Helper function for exponential backoff retry logic
         const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
-            if (!db || !auth) {
-                 console.error("fetchWithRetry called when Firebase services are not initialized.");
-                 return;
+            // Check if db and auth are initialized, handling the mock scenario gracefully
+            if (firebaseConfig.projectId === "mock-project-id" || !db || !auth) {
+                 // In the mock config case, we skip the retry logic as it will always fail the actual API call
+                 if (fn.name.includes('signIn')) {
+                    // For auth, assume success in mock mode to let the app proceed
+                    console.log("Mock configuration detected. Skipping Firebase authentication.");
+                    return { user: { uid: 'MOCK_USER_' + crypto.randomUUID() } };
+                 } else {
+                     // For Firestore ops, log and fail gracefully
+                     console.error("Firebase services are mocked or not initialized. Firestore operation skipped.");
+                     throw new Error("MOCK_FIRESTORE_ACCESS_DENIED");
+                 }
             }
+
             for (let i = 0; i < retries; i++) {
                 try {
                     return await fn();
@@ -101,15 +107,33 @@
             enterChatButton.classList.add('opacity-50', 'cursor-not-allowed'); // مطمئن شویم غیرفعال است
 
             try {
+                let userCredential;
                 if (initialAuthToken) {
                     // 1. تلاش برای ورود با توکن کاستوم
-                    await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
+                    userCredential = await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
                 } else {
                     // 2. اگر توکن نبود یا شکست خورد، تلاش برای ورود ناشناس
-                    await fetchWithRetry(() => signInAnonymously(auth));
+                    userCredential = await fetchWithRetry(() => signInAnonymously(auth));
+                }
+                // If it's a mock user, we need to manually update the UI/state since onAuthStateChanged won't fire for mock auth
+                if (userCredential && userCredential.user && userCredential.user.uid.startsWith('MOCK_USER_')) {
+                    const mockUser = userCredential.user;
+                    currentUserId = mockUser.uid;
+                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId} (حالت آفلاین/تستی)`;
+                    
+                    statusMessage.textContent = "حالت تستی فعال: فایربیس غیرفعال";
+                    statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
+                    statusMessage.classList.add('text-orange-400', 'font-bold'); // رنگ جدید برای حالت تستی
+                    enterChatButton.disabled = false; // فعال کردن دکمه
+                    enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    initializeEventListeners();
                 }
             } catch (error) {
                 // اگر تمام تلاش‌ها شکست خورد
+                if (error.message === "MOCK_FIRESTORE_ACCESS_DENIED") {
+                     // Do nothing, we handled the mock case
+                     return;
+                }
                 console.error("Authentication failed after retries:", error);
                 // پیام خطا را به حالت متداول‌تر تغییر می‌دهیم
                 statusMessage.textContent = "خطا در احراز هویت. (کنسول را برای جزئیات خطا بررسی کنید)";
@@ -124,20 +148,21 @@
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     currentUserId = user.uid;
-                    userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
-                    
-                    // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
-                    statusMessage.textContent = "متصل: آماده ورود به چت";
-                    statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold');
-                    statusMessage.classList.add('text-green-400');
-                    enterChatButton.disabled = false; // فعال کردن دکمه
-                    enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                    // ------------------------------------------------
-                    
-                    initializeEventListeners();
+                    // اگر کاربر واقعی است، پیام موفقیت‌آمیز را نمایش بده
+                    if (!user.uid.startsWith('MOCK_USER_')) {
+                         userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
+                        
+                         // --- فعال کردن دکمه و تنظیم پیام موفقیت‌آمیز ---
+                         statusMessage.textContent = "متصل: آماده ورود به چت";
+                         statusMessage.classList.remove('text-red-400', 'text-yellow-400', 'font-bold', 'text-orange-400');
+                         statusMessage.classList.add('text-green-400');
+                         enterChatButton.disabled = false; // فعال کردن دکمه
+                         enterChatButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                         // ------------------------------------------------
+                         initializeEventListeners();
+                    }
                 } else {
                     // اگر کاربر لاگین نیست، فرآیند لاگین را شروع کن.
-                    // این تابع فقط یک بار در ابتدا یا پس از خروج فعال می شود.
                     if (!currentUserId) {
                        handleAuth();
                     }
@@ -178,8 +203,9 @@
         }
 
         const handleEnterChat = () => {
-            if (!db) {
-                alertUser("خطا: اتصال به سرور ناموفق. لطفاً مجدداً تلاش کنید.");
+            // اگر در حالت Mock هستیم، دسترسی به دیتابیس ممکن است منجر به خطا شود.
+            if (firebaseConfig.projectId === "mock-project-id" || !db) {
+                alertUser("خطای دیتابیس: اتصال به سرور فایربیس برقرار نیست. اگر از کلمه رمز استفاده کردید و چت باز نشد، ممکن است قوانین امنیتی (Security Rules) فایربیس دسترسی را مسدود کرده باشند.");
                 return;
             }
 
@@ -234,7 +260,7 @@
             }, (error) => {
                 console.error("Error listening to messages: ", error);
                 // این خطا اغلب به دلیل عدم مجوز فایربیس است
-                alertUser("خطا در بارگذاری پیام‌ها. (احتمالاً مشکل مجوز دسترسی). جزئیات را در کنسول مرورگر ببینید.");
+                alertUser("خطا در بارگذاری پیام‌ها. (احتمالاً مشکل مجوز دسترسی). برای رفع این مشکل، لطفاً قوانین امنیتی Firestore را برای مسیر public/data/secret_chats/ به گونه‌ای تنظیم کنید که allow read, write: if request.auth != null; باشد.");
             });
 
             // Update UI
@@ -245,7 +271,11 @@
         };
 
         const handleSendMessage = async () => {
-            if (!db) return; // اطمینان از مقداردهی db
+            // اگر در حالت Mock هستیم، اجازه ارسال پیام نداریم
+            if (firebaseConfig.projectId === "mock-project-id" || !db) {
+                alertUser("در حالت تستی/آفلاین، امکان ارسال پیام به دیتابیس وجود ندارد.");
+                return;
+            }
 
             const messageText = messageInput.value.trim();
             const secretWord = secretWordInput.value.trim();
@@ -388,7 +418,9 @@
                     ورود به گفتگوی رمزی
                 </button>
             </div>
+            <!-- Added specific hint about security rules here -->
             <p class="mt-8 text-sm text-gray-500">توجه: این کلمه رمز باید دقیقاً برای هر دو نفر یکسان باشد.</p>
+            <p class="mt-2 text-xs text-red-400/80">اگر پس از زدن دکمه ورود، خطا دریافت کردید، احتمالاً قوانین امنیتی Firestore دسترسی را مسدود کرده‌اند. (allow read, write: if request.auth != null;)</p>
         </div>
 
         <!-- 2. Chat Screen -->
