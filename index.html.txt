@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ê› êÊÌ —„“Ì</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, serverTimestamp, setLogLevel, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL FIREBASE VARIABLES (MANDATORY INJECTION) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Mock config */ };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Disable logging in production (optional, for debugging)
+        setLogLevel('error');
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentUserId = null;
+        let unsubscribe = null; // To hold the onSnapshot listener unsubscriber
+
+        // DOM elements (Access the DOM after the script execution starts)
+        const secretWordScreen = document.getElementById('secretWordScreen');
+        const chatScreen = document.getElementById('chatScreen');
+        const enterChatButton = document.getElementById('enterChatButton');
+        const secretWordInput = document.getElementById('secretWordInput');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageButton = document.getElementById('sendMessageButton');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const roomNameDisplay = document.getElementById('roomNameDisplay');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+
+        // Helper function for exponential backoff retry logic
+        const fetchWithRetry = async (fn, retries = 5, delay = 1000) => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+                }
+            }
+        };
+
+        // 1. Authentication Setup
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                userIdDisplay.textContent = `‘‰«”Â ò«—»—Ì ‘„«: ${currentUserId}`;
+                document.getElementById('statusMessage').textContent = "„ ’·: ¬„«œÂ Ê—Êœ »Â ç "; // <--- Œÿ «’·«Õ ‘œÂ
+                // Now that we have a user ID, we can initialize the UI event listeners
+                initializeEventListeners();
+            } else {
+                // If not signed in, sign in using the provided token or anonymously
+                try {
+                    if (initialAuthToken) {
+                        await fetchWithRetry(() => signInWithCustomToken(auth, initialAuthToken));
+                    } else {
+                        await fetchWithRetry(() => signInAnonymously(auth));
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                    // Inform the user on the screen if auth fails completely
+                    document.getElementById('statusMessage').textContent = "Œÿ« œ— « ’«· »Â ”—ÊÌ”. ·ÿ›« ’›ÕÂ —« —›—‘ ò‰Ìœ.";
+                }
+            }
+        });
+
+        // 2. Main Application Logic
+        const initializeEventListeners = () => {
+            enterChatButton.addEventListener('click', handleEnterChat);
+            secretWordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleEnterChat();
+            });
+            sendMessageButton.addEventListener('click', handleSendMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleSendMessage();
+            });
+        };
+
+        const sanitizeChatRoomId = (word) => {
+            // Converts the secret word into a safe, lowercase identifier for the Firestore path
+            return word.trim().toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '_').substring(0, 50);
+        }
+
+        const handleEnterChat = () => {
+            const secretWord = secretWordInput.value.trim();
+            if (secretWord.length < 3) {
+                alertUser("ò·„Â —„“ »«Ìœ Õœ«ﬁ· ? Õ—› »«‘œ.");
+                return;
+            }
+
+            // Unsubscribe from any previous listener if switching rooms
+            if (unsubscribe) {
+                unsubscribe();
+            }
+
+            const chatRoomId = sanitizeChatRoomId(secretWord);
+            
+            // Public Path: /artifacts/{appId}/public/data/secret_chats/{chatRoomId}/messages
+            const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
+            const chatCollectionRef = collection(db, chatCollectionPath);
+
+            // 3. Start listening for messages (onSnapshot)
+            const messagesQuery = query(chatCollectionRef, orderBy('timestamp', 'asc'));
+
+            unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+                messagesContainer.innerHTML = ''; // Clear existing messages
+                snapshot.forEach((doc) => {
+                    displayMessage(doc.data());
+                });
+                // Scroll to the latest message
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }, (error) => {
+                console.error("Error listening to messages: ", error);
+                alertUser("Œÿ« œ— »«—ê–«—Ì ÅÌ«„ùÂ«. „ÿ„∆‰ ‘ÊÌœ ò·„Â —„“ ’ÕÌÕ «” .");
+            });
+
+            // Update UI
+            roomNameDisplay.textContent = secretWord;
+            secretWordScreen.classList.add('hidden');
+            chatScreen.classList.remove('hidden');
+            messageInput.focus();
+        };
+
+        const handleSendMessage = async () => {
+            const messageText = messageInput.value.trim();
+            const secretWord = secretWordInput.value.trim();
+
+            if (!messageText || !secretWord || !currentUserId) return;
+
+            const chatRoomId = sanitizeChatRoomId(secretWord);
+            const chatCollectionPath = `artifacts/${appId}/public/data/secret_chats/${chatRoomId}/messages`;
+            const chatCollectionRef = collection(db, chatCollectionPath);
+            
+            const message = {
+                text: messageText,
+                senderId: currentUserId,
+                timestamp: serverTimestamp()
+            };
+
+            try {
+                // Add the new message to Firestore
+                await fetchWithRetry(() => addDoc(chatCollectionRef, message));
+                messageInput.value = ''; // Clear input
+            } catch (error) {
+                console.error("Error sending message: ", error);
+                alertUser("Œÿ« œ— «—”«· ÅÌ«„. ·ÿ›« œÊ»«—Â «„ Õ«‰ ò‰Ìœ.");
+            }
+        };
+
+        const displayMessage = (data) => {
+            const isMine = data.senderId === currentUserId;
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('flex', 'mb-4', isMine ? 'justify-end' : 'justify-start');
+
+            // Determine display name: "‘„«" (You) or a short ID for the friend
+            const senderName = isMine ? '‘„«' : `œÊ”  (${data.senderId.substring(0, 4)}...)`;
+            const senderColor = isMine ? 'bg-indigo-600' : 'bg-gray-700';
+            const textColor = 'text-white';
+            const bubbleClasses = isMine ? 'rounded-tl-xl rounded-bl-xl rounded-br-xl' : 'rounded-tr-xl rounded-bl-xl rounded-br-xl';
+            
+            // Format timestamp for display (if available)
+            let timeStr = '';
+            if (data.timestamp && data.timestamp.toDate) {
+                const date = data.timestamp.toDate();
+                timeStr = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            messageElement.innerHTML = `
+                <div class="max-w-xs sm:max-w-md lg:max-w-lg">
+                    <!-- Sender Name -->
+                    <div class="text-xs ${isMine ? 'text-left' : 'text-right'} mb-1 text-gray-400 font-medium">
+                        ${senderName}
+                    </div>
+                    <!-- Message Bubble -->
+                    <div class="${senderColor} ${textColor} ${bubbleClasses} p-3 shadow-lg break-words text-base leading-relaxed">
+                        ${data.text}
+                    </div>
+                    <!-- Timestamp -->
+                    <div class="text-xs mt-1 ${isMine ? 'text-right' : 'text-left'} text-gray-500">
+                        ${timeStr}
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(messageElement);
+        };
+
+        // Custom Modal for Alerts (replacing built-in alert)
+        const alertUser = (message) => {
+            const modal = document.getElementById('customAlertModal');
+            const alertMessage = document.getElementById('alertMessage');
+            const closeButton = document.getElementById('closeAlertButton');
+
+            alertMessage.textContent = message;
+            modal.classList.remove('hidden');
+
+            closeButton.onclick = () => {
+                modal.classList.add('hidden');
+            };
+            // Close on click outside
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            };
+        };
+
+        // Expose alert function globally for use outside module if needed
+        window.alertUser = alertUser;
+
+    </script>
+    <style>
+        /* Custom scrollbar for chat container */
+        #messagesContainer::-webkit-scrollbar {
+            width: 8px;
+        }
+        #messagesContainer::-webkit-scrollbar-thumb {
+            background-color: #4a5568; /* dark gray */
+            border-radius: 4px;
+        }
+        #messagesContainer::-webkit-scrollbar-track {
+            background-color: #2d3748; /* darker background */
+        }
+        /* Ensure font is readable, especially for Persian */
+        body {
+            font-family: 'Inter', Tahoma, sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- Custom Alert Modal (Replaces alert()) -->
+    <div id="customAlertModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center border border-red-500/50">
+            <p id="alertMessage" class="text-red-300 mb-4 text-lg"></p>
+            <button id="closeAlertButton" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition duration-200">
+                »«‘Â
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Application Container -->
+    <div class="w-full max-w-3xl h-[90vh] flex flex-col bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
+
+        <!-- Status/User ID Display -->
+        <div class="p-3 bg-gray-700 text-xs text-center border-b border-gray-600">
+            <span id="userIdDisplay" class="text-gray-400">œ— Õ«· « ’«·...</span>
+            <span id="statusMessage" class="text-green-400"></span>
+        </div>
+
+        <!-- 1. Secret Word Screen -->
+        <div id="secretWordScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
+            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">ê› êÊÌ „Œ›Ì</h1>
+            <p class="mb-8 text-gray-400">»—«Ì »«“ ‘œ‰ ’›ÕÂ ç ° ‘„« Ê œÊ”  «‰ »«Ìœ œﬁÌﬁ« Ìò ò·„Â —„“ „‘ —ò —« Ê«—œ ò‰Ìœ.</p>
+            
+            <div class="w-full max-w-sm">
+                <input type="text" id="secretWordInput" placeholder="ò·„Â —„“ „‘ —ò —« «Ì‰Ã« Ê«—œ ò‰Ìœ..."
+                       class="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-lg text-center"
+                       required>
+                <button id="enterChatButton"
+                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01]">
+                    Ê—Êœ »Â ê› êÊÌ —„“Ì
+                </button>
+            </div>
+            <p class="mt-8 text-sm text-gray-500"> ÊÃÂ: «Ì‰ ò·„Â —„“ »«Ìœ œﬁÌﬁ« »—«Ì Â— œÊ ‰›— Ìò”«‰ »«‘œ.</p>
+        </div>
+
+        <!-- 2. Chat Screen -->
+        <div id="chatScreen" class="flex-grow flex flex-col hidden">
+            
+            <!-- Chat Header -->
+            <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md">
+                « «ﬁ: <span id="roomNameDisplay">...</span>
+            </div>
+
+            <!-- Messages List -->
+            <div id="messagesContainer" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-800">
+                <!-- Messages will be injected here by JavaScript -->
+                <div class="text-center text-gray-500 mt-4">„‰ Ÿ— ÅÌ«„ùÂ«Ì ÃœÌœ...</div>
+            </div>
+
+            <!-- Message Input Area -->
+            <div class="p-4 bg-gray-700 border-t border-gray-600 flex space-x-2 space-x-reverse">
+                <input type="text" id="messageInput" placeholder="ÅÌ«„ ŒÊœ —«  «ÌÅ ò‰Ìœ..."
+                       class="flex-grow p-3 bg-gray-800 border border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-base">
+                <button id="sendMessageButton"
+                        class="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition duration-200 flex items-center justify-center">
+                    <svg class="w-6 h-6 transform -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
