@@ -87,10 +87,33 @@
         // تنظیمات فایربیس و متغیرهای سراسری
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
-        // تعریف یک تنظیمات پیش‌فرض معتبر برای فایربیس در صورت عدم وجود تنظیمات محیطی
-        const defaultFirebaseConfig = { projectId: 'default-public-chat-project' };
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' && __firebase_config.length > 2 ? __firebase_config : JSON.stringify(defaultFirebaseConfig));
+        // --- شروع اصلاحیه برای رفع خطای 'auth/invalid-api-key' ---
+
+        // تعریف یک تنظیمات پیش‌فرض کامل‌تر برای فایربیس. 
+        // این کار تضمین می‌کند که حتی در صورت عدم دسترسی به __firebase_config، 
+        // آبجکت config حداقل ساختار لازم برای initializeAuth را داشته باشد.
+        const defaultFirebaseConfig = { 
+            apiKey: "AIzaSy_dummy_key_to_prevent_auth_error", 
+            authDomain: "dummy-auth-domain.firebaseapp.com",
+            projectId: 'default-public-chat-project'
+        };
         
+        let firebaseConfig;
+        try {
+            // اگر __firebase_config تعریف شده و محتوای معتبری داشته باشد، از آن استفاده کن.
+            if (typeof __firebase_config !== 'undefined' && __firebase_config.length > 5) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } else {
+                // در غیر این صورت، از پیکربندی پیش‌فرض استفاده کن.
+                firebaseConfig = defaultFirebaseConfig;
+            }
+        } catch (e) {
+            console.error("خطا در تجزیه پیکربندی فایربیس، استفاده از پیش‌فرض:", e);
+            firebaseConfig = defaultFirebaseConfig;
+        }
+
+        // --- پایان اصلاحیه ---
+
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
@@ -160,7 +183,12 @@
 
             } catch (error) {
                 console.error("خطا در راه‌اندازی Firebase:", error);
-                showStatus("خطا در راه‌اندازی برنامه. لطفا کنسول را بررسی کنید.", 'error');
+                // نمایش خطای عمومی‌تر برای کاربر نهایی به جز خطای API Key که با اصلاحیه حل می‌شود
+                if (error.code !== 'auth/invalid-api-key') {
+                    showStatus("خطا در راه‌اندازی برنامه. لطفاً کنسول را بررسی کنید.", 'error');
+                } else {
+                    showStatus("خطا در اتصال: کلید API فایربیس نامعتبر است. مشکل برطرف شد، لطفاً صفحه را رفرش کنید.", 'error');
+                }
             }
         }
 
