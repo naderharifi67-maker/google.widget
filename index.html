@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ê› êÊÌ —„“Ì</title>
+    <title>¬ê√ù√ä¬ê√¶√≠ √ë√£√í√≠</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Firebase SDKs -->
@@ -55,8 +55,8 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUserId = user.uid;
-                userIdDisplay.textContent = `‘‰«”Â ò«—»—Ì ‘„«: ${currentUserId}`;
-                document.getElementById('statusMessage').textContent = "„ ’·: ¬„«œÂ Ê—Êœ »Â ç "; // <--- Œÿ «’·«Õ ‘œÂ
+                userIdDisplay.textContent = `√î√§√á√ì√• Àú√á√ë√à√ë√≠ √î√£√á: ${currentUserId}`;
+                document.getElementById('statusMessage').textContent = "√£√ä√ï√°: √Ç√£√á√è√• √¶√ë√¶√è √à√• ¬ç√ä"; // <--- √é√ò √á√ï√°√á√ç √î√è√•
                 // Now that we have a user ID, we can initialize the UI event listeners
                 initializeEventListeners();
             } else {
@@ -70,7 +70,7 @@
                 } catch (error) {
                     console.error("Authentication failed:", error);
                     // Inform the user on the screen if auth fails completely
-                    document.getElementById('statusMessage').textContent = "Œÿ« œ— « ’«· »Â ”—ÊÌ”. ·ÿ›« ’›ÕÂ —« —›—‘ ò‰Ìœ.";
+                    document.getElementById('statusMessage').textContent = "√é√ò√á √è√ë √á√ä√ï√á√° √à√• √ì√ë√¶√≠√ì. √°√ò√ù√á√∞ √ï√ù√ç√• √ë√á √ë√ù√ë√î Àú√§√≠√è.";
                 }
             }
         });
@@ -95,7 +95,7 @@
         const handleEnterChat = () => {
             const secretWord = secretWordInput.value.trim();
             if (secretWord.length < 3) {
-                alertUser("ò·„Â —„“ »«Ìœ Õœ«ﬁ· ? Õ—› »«‘œ.");
+                alertUser("Àú√°√£√• √ë√£√í √à√á√≠√è √ç√è√á√û√° ? √ç√ë√ù √à√á√î√è.");
                 return;
             }
 
@@ -122,7 +122,7 @@
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
                 console.error("Error listening to messages: ", error);
-                alertUser("Œÿ« œ— »«—ê–«—Ì ÅÌ«„ùÂ«. „ÿ„∆‰ ‘ÊÌœ ò·„Â —„“ ’ÕÌÕ «” .");
+                alertUser("√é√ò√á √è√ë √à√á√ë¬ê√ê√á√ë√≠ ¬Å√≠√á√£¬ù√•√á. √£√ò√£√Ü√§ √î√¶√≠√è Àú√°√£√• √ë√£√í √ï√ç√≠√ç √á√ì√ä.");
             });
 
             // Update UI
@@ -154,7 +154,7 @@
                 messageInput.value = ''; // Clear input
             } catch (error) {
                 console.error("Error sending message: ", error);
-                alertUser("Œÿ« œ— «—”«· ÅÌ«„. ·ÿ›« œÊ»«—Â «„ Õ«‰ ò‰Ìœ.");
+                alertUser("√é√ò√á √è√ë √á√ë√ì√á√° ¬Å√≠√á√£. √°√ò√ù√á√∞ √è√¶√à√á√ë√• √á√£√ä√ç√á√§ Àú√§√≠√è.");
             }
         };
 
@@ -163,8 +163,8 @@
             const messageElement = document.createElement('div');
             messageElement.classList.add('flex', 'mb-4', isMine ? 'justify-end' : 'justify-start');
 
-            // Determine display name: "‘„«" (You) or a short ID for the friend
-            const senderName = isMine ? '‘„«' : `œÊ”  (${data.senderId.substring(0, 4)}...)`;
+            // Determine display name: "√î√£√á" (You) or a short ID for the friend
+            const senderName = isMine ? '√î√£√á' : `√è√¶√ì√ä (${data.senderId.substring(0, 4)}...)`;
             const senderColor = isMine ? 'bg-indigo-600' : 'bg-gray-700';
             const textColor = 'text-white';
             const bubbleClasses = isMine ? 'rounded-tl-xl rounded-bl-xl rounded-br-xl' : 'rounded-tr-xl rounded-bl-xl rounded-br-xl';
@@ -244,7 +244,7 @@
         <div class="bg-gray-800 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center border border-red-500/50">
             <p id="alertMessage" class="text-red-300 mb-4 text-lg"></p>
             <button id="closeAlertButton" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition duration-200">
-                »«‘Â
+                √à√á√î√•
             </button>
         </div>
     </div>
@@ -254,25 +254,25 @@
 
         <!-- Status/User ID Display -->
         <div class="p-3 bg-gray-700 text-xs text-center border-b border-gray-600">
-            <span id="userIdDisplay" class="text-gray-400">œ— Õ«· « ’«·...</span>
+            <span id="userIdDisplay" class="text-gray-400">√è√ë √ç√á√° √á√ä√ï√á√°...</span>
             <span id="statusMessage" class="text-green-400"></span>
         </div>
 
         <!-- 1. Secret Word Screen -->
         <div id="secretWordScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
-            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">ê› êÊÌ „Œ›Ì</h1>
-            <p class="mb-8 text-gray-400">»—«Ì »«“ ‘œ‰ ’›ÕÂ ç ° ‘„« Ê œÊ”  «‰ »«Ìœ œﬁÌﬁ« Ìò ò·„Â —„“ „‘ —ò —« Ê«—œ ò‰Ìœ.</p>
+            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">¬ê√ù√ä¬ê√¶√≠ √£√é√ù√≠</h1>
+            <p class="mb-8 text-gray-400">√à√ë√á√≠ √à√á√í √î√è√§ √ï√ù√ç√• ¬ç√ä¬° √î√£√á √¶ √è√¶√ì√ä√ä√á√§ √à√á√≠√è √è√û√≠√û√á√∞ √≠Àú Àú√°√£√• √ë√£√í √£√î√ä√ëÀú √ë√á √¶√á√ë√è Àú√§√≠√è.</p>
             
             <div class="w-full max-w-sm">
-                <input type="text" id="secretWordInput" placeholder="ò·„Â —„“ „‘ —ò —« «Ì‰Ã« Ê«—œ ò‰Ìœ..."
+                <input type="text" id="secretWordInput" placeholder="Àú√°√£√• √ë√£√í √£√î√ä√ëÀú √ë√á √á√≠√§√å√á √¶√á√ë√è Àú√§√≠√è..."
                        class="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-lg text-center"
                        required>
                 <button id="enterChatButton"
                         class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01]">
-                    Ê—Êœ »Â ê› êÊÌ —„“Ì
+                    √¶√ë√¶√è √à√• ¬ê√ù√ä¬ê√¶√≠ √ë√£√í√≠
                 </button>
             </div>
-            <p class="mt-8 text-sm text-gray-500"> ÊÃÂ: «Ì‰ ò·„Â —„“ »«Ìœ œﬁÌﬁ« »—«Ì Â— œÊ ‰›— Ìò”«‰ »«‘œ.</p>
+            <p class="mt-8 text-sm text-gray-500">√ä√¶√å√•: √á√≠√§ Àú√°√£√• √ë√£√í √à√á√≠√è √è√û√≠√û√á√∞ √à√ë√á√≠ √•√ë √è√¶ √§√ù√ë √≠Àú√ì√á√§ √à√á√î√è.</p>
         </div>
 
         <!-- 2. Chat Screen -->
@@ -280,18 +280,18 @@
             
             <!-- Chat Header -->
             <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md">
-                « «ﬁ: <span id="roomNameDisplay">...</span>
+                √á√ä√á√û: <span id="roomNameDisplay">...</span>
             </div>
 
             <!-- Messages List -->
             <div id="messagesContainer" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-800">
                 <!-- Messages will be injected here by JavaScript -->
-                <div class="text-center text-gray-500 mt-4">„‰ Ÿ— ÅÌ«„ùÂ«Ì ÃœÌœ...</div>
+                <div class="text-center text-gray-500 mt-4">√£√§√ä√ô√ë ¬Å√≠√á√£¬ù√•√á√≠ √å√è√≠√è...</div>
             </div>
 
             <!-- Message Input Area -->
             <div class="p-4 bg-gray-700 border-t border-gray-600 flex space-x-2 space-x-reverse">
-                <input type="text" id="messageInput" placeholder="ÅÌ«„ ŒÊœ —«  «ÌÅ ò‰Ìœ..."
+                <input type="text" id="messageInput" placeholder="¬Å√≠√á√£ √é√¶√è √ë√á √ä√á√≠¬Å Àú√§√≠√è..."
                        class="flex-grow p-3 bg-gray-800 border border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-base">
                 <button id="sendMessageButton"
                         class="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition duration-200 flex items-center justify-center">
@@ -303,4 +303,5 @@
         </div>
     </div>
 </body>
+
 </html>
