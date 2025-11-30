@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ÝÊæí ÑãÒí</title>
+    <title>گفتگوی رمزی</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Firebase SDKs -->
@@ -55,8 +55,8 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUserId = user.uid;
-                userIdDisplay.textContent = `ÔäÇÓå ˜ÇÑÈÑí ÔãÇ: ${currentUserId}`;
-                document.getElementById('statusMessage').textContent = "ãÊÕá: ÂãÇÏå æÑæÏ Èå Ê"; // <--- ÎØ ÇÕáÇÍ ÔÏå
+                userIdDisplay.textContent = `شناسه کاربری شما: ${currentUserId}`;
+                document.getElementById('statusMessage').textContent = "متصل: آماده ورود به چت"; // <--- خط اصلاح شده
                 // Now that we have a user ID, we can initialize the UI event listeners
                 initializeEventListeners();
             } else {
@@ -70,7 +70,7 @@
                 } catch (error) {
                     console.error("Authentication failed:", error);
                     // Inform the user on the screen if auth fails completely
-                    document.getElementById('statusMessage').textContent = "ÎØÇ ÏÑ ÇÊÕÇá Èå ÓÑæíÓ. áØÝÇð ÕÝÍå ÑÇ ÑÝÑÔ ˜äíÏ.";
+                    document.getElementById('statusMessage').textContent = "خطا در اتصال به سرویس. لطفاً صفحه را رفرش کنید.";
                 }
             }
         });
@@ -95,7 +95,7 @@
         const handleEnterChat = () => {
             const secretWord = secretWordInput.value.trim();
             if (secretWord.length < 3) {
-                alertUser("˜áãå ÑãÒ ÈÇíÏ ÍÏÇÞá ? ÍÑÝ ÈÇÔÏ.");
+                alertUser("کلمه رمز باید حداقل ۳ حرف باشد.");
                 return;
             }
 
@@ -122,7 +122,7 @@
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
                 console.error("Error listening to messages: ", error);
-                alertUser("ÎØÇ ÏÑ ÈÇÑÐÇÑí íÇãåÇ. ãØãÆä ÔæíÏ ˜áãå ÑãÒ ÕÍíÍ ÇÓÊ.");
+                alertUser("خطا در بارگذاری پیام‌ها. مطمئن شوید کلمه رمز صحیح است.");
             });
 
             // Update UI
@@ -154,7 +154,7 @@
                 messageInput.value = ''; // Clear input
             } catch (error) {
                 console.error("Error sending message: ", error);
-                alertUser("ÎØÇ ÏÑ ÇÑÓÇá íÇã. áØÝÇð ÏæÈÇÑå ÇãÊÍÇä ˜äíÏ.");
+                alertUser("خطا در ارسال پیام. لطفاً دوباره امتحان کنید.");
             }
         };
 
@@ -163,8 +163,8 @@
             const messageElement = document.createElement('div');
             messageElement.classList.add('flex', 'mb-4', isMine ? 'justify-end' : 'justify-start');
 
-            // Determine display name: "ÔãÇ" (You) or a short ID for the friend
-            const senderName = isMine ? 'ÔãÇ' : `ÏæÓÊ (${data.senderId.substring(0, 4)}...)`;
+            // Determine display name: "شما" (You) or a short ID for the friend
+            const senderName = isMine ? 'شما' : `دوست (${data.senderId.substring(0, 4)}...)`;
             const senderColor = isMine ? 'bg-indigo-600' : 'bg-gray-700';
             const textColor = 'text-white';
             const bubbleClasses = isMine ? 'rounded-tl-xl rounded-bl-xl rounded-br-xl' : 'rounded-tr-xl rounded-bl-xl rounded-br-xl';
@@ -233,7 +233,8 @@
         }
         /* Ensure font is readable, especially for Persian */
         body {
-            font-family: 'Inter', Tahoma, sans-serif;
+            /* تنظیم فونت برای خوانایی بهتر در زبان فارسی روی دستگاه‌های مختلف */
+            font-family: Tahoma, "Segoe UI", 'Inter', "Noto Sans Arabic", sans-serif;
         }
     </style>
 </head>
@@ -244,7 +245,7 @@
         <div class="bg-gray-800 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center border border-red-500/50">
             <p id="alertMessage" class="text-red-300 mb-4 text-lg"></p>
             <button id="closeAlertButton" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition duration-200">
-                ÈÇÔå
+                باشه
             </button>
         </div>
     </div>
@@ -254,25 +255,25 @@
 
         <!-- Status/User ID Display -->
         <div class="p-3 bg-gray-700 text-xs text-center border-b border-gray-600">
-            <span id="userIdDisplay" class="text-gray-400">ÏÑ ÍÇá ÇÊÕÇá...</span>
+            <span id="userIdDisplay" class="text-gray-400">در حال اتصال...</span>
             <span id="statusMessage" class="text-green-400"></span>
         </div>
 
         <!-- 1. Secret Word Screen -->
         <div id="secretWordScreen" class="flex-grow flex flex-col items-center justify-center p-6 text-center">
-            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">ÝÊæí ãÎÝí</h1>
-            <p class="mb-8 text-gray-400">ÈÑÇí ÈÇÒ ÔÏä ÕÝÍå Ê¡ ÔãÇ æ ÏæÓÊÊÇä ÈÇíÏ ÏÞíÞÇð í˜ ˜áãå ÑãÒ ãÔÊÑ˜ ÑÇ æÇÑÏ ˜äíÏ.</p>
+            <h1 class="text-4xl font-extrabold mb-4 text-indigo-400">گفتگوی مخفی</h1>
+            <p class="mb-8 text-gray-400">برای باز شدن صفحه چت، شما و دوستتان باید دقیقاً یک کلمه رمز مشترک را وارد کنید.</p>
             
             <div class="w-full max-w-sm">
-                <input type="text" id="secretWordInput" placeholder="˜áãå ÑãÒ ãÔÊÑ˜ ÑÇ ÇíäÌÇ æÇÑÏ ˜äíÏ..."
+                <input type="text" id="secretWordInput" placeholder="کلمه رمز مشترک را اینجا وارد کنید..."
                        class="w-full p-3 mb-4 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-lg text-center"
                        required>
                 <button id="enterChatButton"
                         class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition duration-200 transform hover:scale-[1.01]">
-                    æÑæÏ Èå ÝÊæí ÑãÒí
+                    ورود به گفتگوی رمزی
                 </button>
             </div>
-            <p class="mt-8 text-sm text-gray-500">ÊæÌå: Çíä ˜áãå ÑãÒ ÈÇíÏ ÏÞíÞÇð ÈÑÇí åÑ Ïæ äÝÑ í˜ÓÇä ÈÇÔÏ.</p>
+            <p class="mt-8 text-sm text-gray-500">توجه: این کلمه رمز باید دقیقاً برای هر دو نفر یکسان باشد.</p>
         </div>
 
         <!-- 2. Chat Screen -->
@@ -280,18 +281,18 @@
             
             <!-- Chat Header -->
             <div class="p-3 bg-indigo-700 text-white font-bold text-center text-lg shadow-md">
-                ÇÊÇÞ: <span id="roomNameDisplay">...</span>
+                اتاق: <span id="roomNameDisplay">...</span>
             </div>
 
             <!-- Messages List -->
             <div id="messagesContainer" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-800">
                 <!-- Messages will be injected here by JavaScript -->
-                <div class="text-center text-gray-500 mt-4">ãäÊÙÑ íÇãåÇí ÌÏíÏ...</div>
+                <div class="text-center text-gray-500 mt-4">منتظر پیام‌های جدید...</div>
             </div>
 
             <!-- Message Input Area -->
             <div class="p-4 bg-gray-700 border-t border-gray-600 flex space-x-2 space-x-reverse">
-                <input type="text" id="messageInput" placeholder="íÇã ÎæÏ ÑÇ ÊÇí ˜äíÏ..."
+                <input type="text" id="messageInput" placeholder="پیام خود را تایپ کنید..."
                        class="flex-grow p-3 bg-gray-800 border border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white placeholder-gray-500 text-base">
                 <button id="sendMessageButton"
                         class="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition duration-200 flex items-center justify-center">
@@ -303,5 +304,4 @@
         </div>
     </div>
 </body>
-
 </html>
