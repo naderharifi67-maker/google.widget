@@ -7,12 +7,13 @@
     <!-- Tailwind CSS CDN for modern and responsive styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* استفاده از فونت استاندارد براي شبيه‌سازي ظاهر گوگل */
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        /* استفاده از فونت Vazirmatn به عنوان اولویت، با fallback قوی به فونت‌های سیستمی فارسی/عربی */
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         
         body {
-            font-family: 'Vazirmatn', 'Roboto', sans-serif;
+            /* استک فونت مقاوم: Vazirmatn، سپس یک فونت سیستمی فارسی (مثل Tahoma که در ویندوز رایج است) و در نهایت فونت‌های عمومی */
+            font-family: 'Vazirmatn', Tahoma, 'Roboto', Arial, sans-serif;
             background-color: #ffffff;
             color: #202124;
         }
@@ -35,11 +36,12 @@
             @apply text-indigo-700 border-indigo-700 !important;
         }
 
-        /* استايل براي محل مخفي نمايش رمز */
-        .hidden-result {
-            color: #dadce0; 
+        /* استايل براي محل نمايش اطلاعات کاربر (تصحيح شده) */
+        #user-info-display {
+            color: #9c9c9c; /* خاکستری روشن برای مخفی بودن نسبی */
             font-size: 0.7rem;
-            direction: ltr;
+            direction: ltr; /* اطمینان از نمایش صحیح متن انگلیسی */
+            font-family: 'Roboto', monospace; /* استفاده از فونت انگلیسی مطمئن */
         }
 
         /* انيميشن محو شدن براي نتيجه رمزگشايي - 0.5 ثانيه */
@@ -50,15 +52,13 @@
         
         #decrypted-text {
             direction: rtl; 
-            font-family: 'Vazirmatn', sans-serif; 
+            font-family: 'Vazirmatn', Tahoma, sans-serif; 
         }
         
-        /* حذف خط پيش‌فرض خاکستري از زير هدر که باعث ايجاد خط ناخواسته مي‌شد */
         .main-header {
-            @apply w-full border-b-0; /* خط زيرين هدر اصلي را پاک مي‌کنيم */
+            @apply w-full border-b-0;
         }
         
-        /* خط خاکستري ملايم فقط به پايين نوار ناوبري (nav) اضافه مي‌شود تا تب‌ها را از محتواي زيرين جدا کند */
         .nav-bar {
             @apply border-b border-gray-200;
         }
@@ -74,8 +74,8 @@
                 <span class="text-blue-500">G</span><span class="text-red-500">o</span><span class="text-yellow-500">o</span><span class="text-blue-500">g</span><span class="text-green-500">l</span><span class="text-red-500">e</span>
             </div>
             
-            <!-- User Info -->
-            <div id="user-info-display" class="hidden-result md:inline-block"></div>
+            <!-- User Info (تصحیح شده: کلاس hidden-result حذف شد) -->
+            <div id="user-info-display" class="md:inline-block"></div>
         </div>
         
         <!-- Search Tabs (Key for switching modes) -->
@@ -83,7 +83,7 @@
             <div class="flex space-x-6 space-x-reverse">
                 <button id="search-tab" class="tab-button tab-active">جستجو</button>
                 <button id="news-tab" class="tab-button">رمزگشایی</button>
-                <button id="library-tab" class="tab-button">کتابخانه</button> <!-- تب جدید برای نمایش عمومی پیام‌ها -->
+                <button id="library-tab" class="tab-button">کتابخانه</button> 
                 <button id="maps-tab" class="tab-button">نقشه‌ها</button>
             </div>
         </nav>
@@ -107,15 +107,12 @@
 
         <!-- Mode Status & Decrypted Result Area (Now completely empty) -->
         <div id="mode-status" class="text-center mb-6 text-lg font-semibold text-gray-600">
-            <!-- اين قسمت هميشه خالي است تا هيچ متني ظاهر نشود -->
         </div>
 
         <!-- Decryption Result Display (Hidden initially, appears on News mode success/failure) -->
-        <!-- کادر بدون هيچ استايل هشداري، فقط يک ديو پنهان است -->
+        <!-- اطمینان از پنهان بودن این کادر در بارگذاری اولیه -->
         <div id="decryption-box" class="hidden p-3 text-center" role="alert">
-            <!-- اين پاراگراف براي عنوان بود که حالا خالي مي‌ماند -->
             <p class="font-bold mb-2"></p>
-            <!-- متن رمزگشايي شده با اندازه و رنگ عادي -->
             <p id="decrypted-text" class="text-base text-gray-800"></p>
         </div>
 
@@ -156,7 +153,7 @@
         const searchInput = document.getElementById('search-input');
         const searchTab = document.getElementById('search-tab');
         const newsTab = document.getElementById('news-tab');
-        const libraryTab = document.getElementById('library-tab'); // ID تغییر داده شده
+        const libraryTab = document.getElementById('library-tab'); 
         const mapsTab = document.getElementById('maps-tab');
         const modeStatus = document.getElementById('mode-status');
         const decryptionBox = document.getElementById('decryption-box');
@@ -419,13 +416,15 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        userInfoDisplay.textContent = `User: ${userId.substring(0, 8)}...`;
+                        // نمایش شناسه کاربر با فونت مطمئن و انگلیسی
+                        userInfoDisplay.textContent = `User: ${userId.substring(0, 8)}...`; 
                         isAuthReady = true;
                         // اگر در حالت کتابخانه بود، Listener را فعال کن.
                         if (currentMode === 'library') {
                             setupLibraryListener();
                         }
                     } else {
+                        // در صورت عدم احراز هویت اولیه، با توکن اختصاصی یا ناشناس وارد شو
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
@@ -436,8 +435,7 @@
 
             } catch (error) {
                 console.error("خطا در راه‌اندازي فايربيس (Auth/DB):", error);
-                // تنها پيام خطاي سيستمي در اينجا مجاز است.
-                displayError("خطا در اتصال به سرويس. لطفاً مرورگر را رفرش کنيد.");
+                // خطا را فقط در کنسول نمایش می‌دهیم و از نمایش آن در UI در هنگام راه‌اندازی اولیه جلوگیری می‌کنیم
             }
         }
         
@@ -466,7 +464,6 @@
             // تنظيم حالت فعال بر اساس کليک
             let activeTabElement;
             let placeholderText = ""; 
-            let statusHTML = ""; 
             let inputDirection = 'rtl';
             
             // مدیریت نمایش کادر ورودی
@@ -475,7 +472,7 @@
             if (mode === 'encode') {
                 activeTabElement = searchTab;
                 inputDirection = 'rtl';
-                placeholderText = "متن خود را وارد و Enter کنید تا رمزگذاری شود...";
+                placeholderText = "متن خود را وارد و Enter کنید تا رمزگذاری و عمومی شود...";
                 
             } else if (mode === 'decode') {
                 activeTabElement = newsTab;
@@ -505,7 +502,6 @@
 
             // اعمال تغييرات به DOM
             searchInput.placeholder = placeholderText; 
-            modeStatus.innerHTML = statusHTML; 
             searchInput.style.direction = inputDirection;
             
             searchInput.focus();
@@ -643,9 +639,10 @@
         }
 
         function displayError(message) {
+            // این تابع برای خطاهای غیرقابل رفع است که نیاز به نمایش دائمی دارند
             resultsArea.innerHTML = `
                 <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg" role="alert">
-                    <p class="font-bold mb-1">خطا:</p>
+                    <p class="font-bold mb-1">Error:</p>
                     <p>${message}</p>
                 </div>
             `;
@@ -693,16 +690,15 @@
             retryButton.addEventListener('click', () => {
                 if (copyToClipboard(stealthKey)) {
                     // --- تغييرات جديد: حذف پيام متني و فقط تغيير بصري ---
-                    statusMessage.innerHTML = ''; // پيام وضعيت را خالي نگه مي‌داريم
+                    statusMessage.innerHTML = ''; 
                     retryButton.classList.remove('bg-blue-600', 'bg-red-600');
                     retryButton.classList.add('bg-green-600');
-                    // *** خطي که متن دکمه را به 'Copied' تغيير مي‌داد حذف شد. ***
+                    retryButton.textContent = "Copied!"; // نمایش موقت "Copied!"
 
                     // پاک کردن پيام پس از 3 ثانيه براي بازگشت به حالت اوليه
                     setTimeout(() => {
                         resultsArea.innerHTML = '';
-                        // اطمينان از بازگشت دکمه به رنگ آبي اصلي (گرچه با حذف resultsArea ديگر مهم نيست)
-                        // اما براي تميزي کد:
+                        // اطمينان از بازگشت دکمه به رنگ آبي اصلي 
                         retryButton.classList.remove('bg-green-600');
                         retryButton.classList.add('bg-blue-600'); 
                         retryButton.textContent = originalButtonText;
@@ -715,7 +711,7 @@
                     statusMessage.innerHTML = '<span class="text-red-600 font-bold">Error:</span> Manual copy failed. Please try reloading.';
                     retryButton.classList.remove('bg-blue-600');
                     retryButton.classList.add('bg-red-600');
-                    retryButton.textContent = originalButtonText; // اطمينان از حفظ متن اصلي
+                    retryButton.textContent = originalButtonText; 
                 }
             });
         }
@@ -730,16 +726,14 @@
 
             // در حالت موفقيت (Success)
             if (!isError) {
-                // متن رمزگشايي شده با رنگ عادي (خاکستري تيره) نمايش داده مي‌شود
                 decryptedText.classList.remove('text-red-500'); 
                 decryptedText.classList.add('text-gray-800');
                 titleElement.textContent = "";
 
             // در حالت خطا (Error)
             } else {
-                 // پيام خطاي نامحسوس
                  decryptedText.classList.remove('text-gray-800');
-                 decryptedText.classList.add('text-red-500'); // براي نشان دادن خطا
+                 decryptedText.classList.add('text-red-500'); 
                  titleElement.textContent = "";
             }
 
@@ -763,7 +757,7 @@
 
         searchTab.addEventListener('click', () => switchMode('encode'));
         newsTab.addEventListener('click', () => switchMode('decode'));
-        libraryTab.addEventListener('click', () => switchMode('library')); // فعال‌سازی حالت کتابخانه
+        libraryTab.addEventListener('click', () => switchMode('library')); 
         mapsTab.addEventListener('click', () => switchMode('maps'));
 
         searchInput.addEventListener('keydown', handleInput); 
