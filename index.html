@@ -3,536 +3,776 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ابزار پردازش داده‌ها</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Google</title>
+    <!-- Tailwind CSS CDN for modern and responsive styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght400;700&display=swap');
+        /* استفاده از فونت استاندارد براي شبيه‌سازي ظاهر گوگل */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+        
         body {
-            font-family: 'Vazirmatn', sans-serif;
-            background-color: #1a1a2e; /* Dark theme background */
-            color: #e4e4e7; /* Light text color */
+            font-family: 'Vazirmatn', 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #202124;
         }
-        .container-card {
-            background-color: #2c2c54; /* Card background */
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+
+        /* استايل براي نوار پيمايش بالا که حالت جستجو يا اخبار را نشان مي‌دهد */
+        .tab-button {
+            /* تنظيمات اصلي: پدينگ، مکان‌نما، اندازه فونت، خط زيرين شفاف، رنگ متن پيش‌فرض خاکستري */
+            @apply p-3 cursor-pointer text-sm font-medium border-b-4 border-transparent text-gray-500 transition-colors duration-150;
         }
-        .btn-primary {
-            transition: background-color 0.2s, transform 0.1s;
+
+        /* حالت هاور براي تمام دکمه‌ها: نمايش خط خاکستري ملايم */
+        .tab-button:hover {
+            /* اين خط زيرين ملايم فقط هنگام هاور ظاهر مي‌شود */
+            border-bottom-color: #e0e0e0; 
         }
-        .btn-primary:hover {
-            transform: translateY(-1px);
+        
+        /* حالت فعال: نمايش خط آبي/نيلي پررنگ و تغيير رنگ متن (اولويت بالاتر با !important) */
+        .tab-active {
+            /* هنگام فعال بودن، خط آبي پررنگ و رنگ متن آبي پررنگ مي‌شود */
+            @apply text-indigo-700 border-indigo-700 !important;
         }
-        .btn-primary:active {
-            transform: translateY(0);
+
+        /* استايل براي محل مخفي نمايش رمز */
+        .hidden-result {
+            color: #dadce0; 
+            font-size: 0.7rem;
+            direction: ltr;
         }
-        textarea, input[type="text"] {
-            background-color: #3b3b6b;
-            border-color: #5d5d8e;
-            color: #e4e4e7;
+
+        /* انيميشن محو شدن براي نتيجه رمزگشايي - 0.5 ثانيه */
+        .fade-out {
+            opacity: 0;
+            transition: opacity 0.5s ease-out; 
         }
-        /* Style for the Decryption Result box to look distinct */
-        #decryptionOutput {
-             background-color: #3b3b6b; /* Darker background for result */
-             border-color: #a7f3d0; /* Light green border */
-             color: #a7f3d0; /* Light green text */
-             font-weight: 700;
-             font-size: 1.125rem; /* text-xl */
+        
+        #decrypted-text {
+            direction: rtl; 
+            font-family: 'Vazirmatn', sans-serif; 
         }
-        /* Custom scrollbar for dark theme */
-        ::-webkit-scrollbar {
-            width: 8px;
+        
+        /* حذف خط پيش‌فرض خاکستري از زير هدر که باعث ايجاد خط ناخواسته مي‌شد */
+        .main-header {
+            @apply w-full border-b-0; /* خط زيرين هدر اصلي را پاک مي‌کنيم */
         }
-        ::-webkit-scrollbar-track {
-            background: #2c2c54;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #5d5d8e;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #7a7ab3;
+        
+        /* خط خاکستري ملايم فقط به پايين نوار ناوبري (nav) اضافه مي‌شود تا تب‌ها را از محتواي زيرين جدا کند */
+        .nav-bar {
+            @apply border-b border-gray-200;
         }
     </style>
 </head>
-<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
+<body class="min-h-screen flex flex-col items-center">
 
-    <div class="w-full max-w-4xl container-card p-6 md:p-10 rounded-xl space-y-8">
-        <h1 class="text-3xl md:text-4xl font-bold text-center text-indigo-300">
-            ?? ابزار پردازش داده‌ها
-        </h1>
-        
-        <!-- Key Input - HIGHLY VISIBLE & UNIFIED SECTION -->
-        <div class="space-y-3 border-4 border-yellow-500 rounded-xl p-4 bg-yellow-900/20">
-            <label for="keywordInput" class="block text-xl font-bold text-yellow-300">
-                پارامتر:
-            </label>
-            <input type="text" id="keywordInput" value="secret" placeholder="پارامتر پردازش را وارد کنيد"
-                   class="w-full p-3 rounded-lg border-2 text-xl font-mono text-center border-yellow-500 focus:ring-yellow-400 focus:border-yellow-400 text-white transition duration-150">
-        </div>
-
-
-        <!-- *** ?. ENCRYPTION SECTION (توليد خروجي) *** -->
-        <div class="space-y-4 border-b pb-6 border-indigo-700 pt-4">
-            <h2 class="text-2xl font-semibold text-green-400">?. توليد خروجي</h2>
-            
-            <div>
-                <label for="realInputText" class="block text-lg font-medium text-indigo-300 mb-2">ورودي:</label>
-                
-                <div class="relative">
-                    <!-- 1. Decoy Text Area (Always visible, shows the decoy text, read-only) -->
-                    <textarea id="decoyInputText" rows="5" readonly 
-                              placeholder="ورودي را اينجا وارد کنيد..."
-                              class="w-full p-4 rounded-lg border-2 resize-none transition duration-150 border-gray-600 bg-gray-700/50 text-gray-400"></textarea>
-
-                    <!-- 2. Real Input Text Area (Handles user input, transparent, exactly layered) -->
-                    <textarea id="realInputText" rows="5" 
-                              placeholder="" 
-                              class="absolute top-0 left-0 w-full h-full p-4 rounded-lg border-2 resize-none focus:outline-none focus:border-green-500" 
-                              style="caret-color: white; color: transparent; background: transparent;"></textarea>
-                </div>
+    <!-- Header & Navigation Bar (Simulating Google Search UI) -->
+    <header class="main-header w-full">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <!-- Google Logo (Placeholder) -->
+            <div class="text-2xl font-semibold text-gray-800">
+                <span class="text-blue-500">G</span><span class="text-red-500">o</span><span class="text-yellow-500">o</span><span class="text-blue-500">g</span><span class="text-green-500">l</span><span class="text-red-500">e</span>
             </div>
             
-            <button id="encryptBtn" class="btn-primary w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl text-xl">
-                توليد
-            </button>
-
-            <!-- Encryption Output (Link-like Code) -->
-            <div class="space-y-2 pt-4">
-                <label for="outputText" class="block text-lg font-medium text-indigo-300">خروجي:</label>
-                <div class="relative">
-                    <textarea id="outputText" rows="2" readonly placeholder="خروجي اينجا ظاهر مي‌شود."
-                              class="w-full p-4 rounded-lg border-2 text-gray-200 resize-none font-mono"></textarea>
-                    <button id="copyBtn" class="absolute top-2 right-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-1 px-3 rounded-lg text-sm transition duration-150">
-                        کپي
-                    </button>
-                </div>
+            <!-- User Info -->
+            <div id="user-info-display" class="hidden-result md:inline-block"></div>
+        </div>
+        
+        <!-- Search Tabs (Key for switching modes) -->
+        <nav class="nav-bar max-w-6xl mx-auto px-4">
+            <div class="flex space-x-6 space-x-reverse">
+                <button id="search-tab" class="tab-button tab-active">جستجو</button>
+                <button id="news-tab" class="tab-button">رمزگشایی</button>
+                <button id="library-tab" class="tab-button">کتابخانه</button> <!-- تب جدید برای نمایش عمومی پیام‌ها -->
+                <button id="maps-tab" class="tab-button">نقشه‌ها</button>
             </div>
-        </div>
-        
-        <!-- *** ?. DECRYPTION SECTION (بررسي ورودي) *** -->
-        <div class="space-y-4 pt-6">
-            <h2 class="text-2xl font-semibold text-red-400">?. بررسي ورودي</h2>
-            
-            <div>
-                <label for="decryptionInput" class="block text-lg font-medium mb-2 text-indigo-300">ورودي براي بررسي:</label>
-                <!-- NEW INPUT FIELD FOR DECRYPTION -->
-                <textarea id="decryptionInput" rows="3" placeholder="داده براي پردازش را اينجا بچسبانيد."
-                          class="w-full p-4 rounded-lg border-2 resize-none focus:ring-red-500 focus:border-red-500 transition duration-150"></textarea>
-            </div>
-            
-            <button id="decryptBtn" class="btn-primary w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl text-xl">
-                اجرا
-            </button>
+        </nav>
+    </header>
 
-            <!-- Decryption Result -->
-            <div class="space-y-2 pt-4">
-                <label for="decryptionOutput" class="block text-lg font-medium text-indigo-300">نتيجه:</label>
-                <div class="relative">
-                    <!-- NEW OUTPUT FIELD FOR DECRYPTED TEXT (No reveal button) -->
-                    <textarea id="decryptionOutput" rows="2" readonly 
-                              placeholder="نتيجه پردازش اينجا نمايش داده مي‌شود."
-                              data-secret=""
-                              class="w-full p-4 rounded-lg border-2 resize-none"></textarea>
-                    
-                    <!-- REVEAL BUTTON REMOVED AS PER USER REQUEST -->
-                </div>
-                <!-- TIMER MESSAGE REMOVED -->
-                <p id="autoHideMessage" class="hidden text-sm text-yellow-400 mt-2 text-center font-medium"></p>
-            </div>
+    <!-- Main Content Area -->
+    <main class="flex-1 w-full max-w-xl px-4 pt-10">
+        <!-- Main Search Input -->
+        <div class="relative mb-6">
+            <input 
+                id="search-input" 
+                type="text" 
+                placeholder="" 
+                autocomplete="off" 
+                class="w-full p-3 pl-10 border border-gray-300 rounded-full shadow-md focus:shadow-lg focus:border-indigo-500 outline-none text-base"
+                autofocus
+            >
+            <!-- Search Icon -->
+            <svg class="w-5 h-5 absolute top-3 left-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         </div>
 
-        <!-- Clear Button -->
-        <div class="flex justify-center pt-8 border-t border-indigo-700">
-             <button id="clearBtn" class="btn-primary w-full md:w-1/2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-xl text-lg">
-                پاکسازي
-            </button>
+        <!-- Mode Status & Decrypted Result Area (Now completely empty) -->
+        <div id="mode-status" class="text-center mb-6 text-lg font-semibold text-gray-600">
+            <!-- اين قسمت هميشه خالي است تا هيچ متني ظاهر نشود -->
         </div>
 
-        <!-- Alert Message -->
-        <div id="alertMessage" class="hidden text-center p-3 rounded-lg bg-indigo-800 text-indigo-100 font-medium transition duration-300" role="alert">
-            عمليات موفقيت آميز بود!
+        <!-- Decryption Result Display (Hidden initially, appears on News mode success/failure) -->
+        <!-- کادر بدون هيچ استايل هشداري، فقط يک ديو پنهان است -->
+        <div id="decryption-box" class="hidden p-3 text-center" role="alert">
+            <!-- اين پاراگراف براي عنوان بود که حالا خالي مي‌ماند -->
+            <p class="font-bold mb-2"></p>
+            <!-- متن رمزگشايي شده با اندازه و رنگ عادي -->
+            <p id="decrypted-text" class="text-base text-gray-800"></p>
         </div>
-    </div>
 
-    <script>
-        const KEYWORD_STORAGE_KEY = 'vigenere_keyword_visible';
+        <!-- Dynamic Search Results Area -->
+        <div id="results-area" class="mt-8">
+            <!-- Results will be dynamically inserted here -->
+        </div>
+    </main>
+
+    <!-- Footer (Cleaned up, no hidden output here) -->
+    <footer class="w-full mt-auto py-3 border-t border-gray-200 text-center">
+        <p class="text-gray-500 text-xs">
+            © 2025 Google - <a href="#" class="underline">حريم خصوصي</a> - <a href="#" class="underline">شرايط</a>
+        </p>
+    </footer>
+
+
+    <!-- Firebase SDKs & Core Logic -->
+    <script type="module">
+        // --- واردات ماژول‌هاي فايربيس ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // واردات مورد نیاز برای رصد لحظه‌ای (onSnapshot) و کوئری‌ها
+        import { getFirestore, doc, setDoc, getDoc, setLogLevel, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- متغيرهاي گلوبال فايربيس ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        let currentMode = 'encode'; 
+        let unsubscribeLibrary = null; // برای نگهداری و قطع کردن شنونده Firestore
         
-        // --- ثابت پيام مورد نظر کاربر ---
-        // DECOY_TEXT_FULL changed to an empty string for completely invisible message
-        const DECOY_TEXT_FULL = ""; 
-        // عبارت فريبنده که هنگام تايپ کاربر نمايش داده مي‌شود
-        const DECOY_PHRASE = "دانلود سريال جديد "; 
-        // ---------------------------------
+        // --- عناصر DOM ---
+        const searchInput = document.getElementById('search-input');
+        const searchTab = document.getElementById('search-tab');
+        const newsTab = document.getElementById('news-tab');
+        const libraryTab = document.getElementById('library-tab'); // ID تغییر داده شده
+        const mapsTab = document.getElementById('maps-tab');
+        const modeStatus = document.getElementById('mode-status');
+        const decryptionBox = document.getElementById('decryption-box');
+        const decryptedText = document.getElementById('decrypted-text');
+        const userInfoDisplay = document.getElementById('user-info-display');
+        const resultsArea = document.getElementById('results-area');
         
-        // --- Zero-Width Character Map for Quaternary Encoding (2 bits per char) ---
-        const INVISIBLE_CHARS = {
-            '00': '\u200B', 
-            '01': '\u200C', 
-            '10': '\u200D', 
-            '11': '\uFEFF',
-        };
-        const VISIBLE_BITS = {
-            '\u200B': '00',
-            '\u200C': '01',
-            '\u200D': '10',
-            '\uFEFF': '11',
-        };
-
-        // --- Element References (Updated) ---
-        const realInputText = document.getElementById('realInputText'); 
-        const decoyInputText = document.getElementById('decoyInputText'); 
-
-        const encryptionOutputText = document.getElementById('outputText');
-        const decryptionInput = document.getElementById('decryptionInput'); 
-        const decryptionOutput = document.getElementById('decryptionOutput'); 
-
-        const keywordInput = document.getElementById('keywordInput'); 
-        const encryptBtn = document.getElementById('encryptBtn');
-        const decryptBtn = document.getElementById('decryptBtn');
-        const copyBtn = document.getElementById('copyBtn');
-        const clearBtn = document.getElementById('clearBtn'); 
-        const alertMessage = document.getElementById('alertMessage');
+        // --- پيکربندي و کليد رمز ---
+        const SECRET_KEY = "GEMINI-CODE-25"; 
+        const START_ASCII = 32; 
+        const END_ASCII = 126;  
+        const RANGE = END_ASCII - START_ASCII + 1;
         
-        // New elements (revealBtn removed, revealTimerMessage renamed)
-        const autoHideMessage = document.getElementById('autoHideMessage');
-        let autoHideTimer = null; // Timer for auto-hiding decrypted message
+        // --- تنظيمات کليد نامرئي (Stealth Mode) ---
+        const INVISIBLE_CHARS = ['\u200B', '\u200C', '\u200D', '\u2060']; 
+        const BASE_N = INVISIBLE_CHARS.length; // 4
+        const BASE_36 = '0123456789abcdefghijklmnopqrstuvwxyz'; 
+        const STEALTH_TRIGGER_KEY = '\u200B\u200C\u200D\u2060'; 
 
-        // --- Initialization: Load key from local storage ---
-        const savedKeyword = localStorage.getItem(KEYWORD_STORAGE_KEY);
-        if (savedKeyword) {
-            keywordInput.value = savedKeyword;
-        } else {
-            localStorage.setItem(KEYWORD_STORAGE_KEY, keywordInput.value);
-        }
-        
-        // --- Utility Functions ---
+        // --- توابع رمزگذاري و رمزگشايي Vigenere-like ---
 
-        /**
-         * Safely converts a Unicode string to Base64 ASCII string.
-         */
-        function b64EncodeUnicode(str) {
-            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-                function(match, p1) {
-                    return String.fromCharCode('0x' + p1);
-                }));
+        function base64Encode(str) {
+            const utf8Str = unescape(encodeURIComponent(str));
+            return btoa(utf8Str);
         }
 
-        /**
-         * Safely converts a Base64 ASCII string back to the original Unicode string.
-         */
-        function b64DecodeUnicode(str) {
-            return decodeURIComponent(atob(str).split('').map(function(c) {
-                return '%' + ('00' + c.codePointAt(0).toString(16)).slice(-2);
-            }).join(''));
-        }
-
-        /**
-         * Converts the Base64 (ASCII) encoded string into a completely invisible string
-         * using Zero-Width Characters (Quaternary Encoding: 2 bits per char).
-         */
-        function encodeToInvisible(text) {
-            let binary = '';
-            // 1. Convert Base64 string to a long binary string
-            for (let i = 0; i < text.length; i++) {
-                // Get the ASCII code point, then convert to 8-bit binary string
-                let byte = text.codePointAt(i);
-                binary += byte.toString(2).padStart(8, '0');
-            }
-
-            let invisible = '';
-            // 2. Convert binary string to Zero-Width characters (2 bits at a time)
-            for (let i = 0; i < binary.length; i += 2) {
-                const quad = binary.substring(i, i + 2);
-                if (quad.length === 2) {
-                    invisible += INVISIBLE_CHARS[quad];
-                }
-            }
-            return invisible;
-        }
-
-        /**
-         * Decodes the invisible string (Zero-Width Characters) back to the Base64 ASCII string.
-         */
-        function decodeFromInvisible(invisibleText) {
-            let binary = '';
-            // 1. Convert Zero-Width chars back to binary string
-            for (let i = 0; i < invisibleText.length; i++) {
-                const char = invisibleText[i];
-                if (VISIBLE_BITS[char]) {
-                    binary += VISIBLE_BITS[char];
-                }
-                // Ignore any characters not in our map (e.g., standard spaces, newlines)
-            }
-
-            let resultText = '';
-            // 2. Convert binary string back to text (8 bits at a time)
-            for (let i = 0; i < binary.length; i += 8) {
-                const byteString = binary.substring(i, i + 8);
-                if (byteString.length === 8) {
-                    const charCode = parseInt(byteString, 2);
-                    resultText += String.fromCodePoint(charCode);
-                }
-            }
-            return resultText;
-        }
-
-
-        function showAlert(message, duration = 3000) {
-            alertMessage.textContent = message;
-            alertMessage.classList.remove('hidden', 'bg-indigo-800', 'bg-red-800', 'bg-green-800');
-            let bgColor = 'bg-indigo-800'; 
-            if (message.includes('خطا') || message.includes('?')) {
-                bgColor = 'bg-red-800';
-            } else if (message.includes('موفق')) {
-                bgColor = 'bg-green-800';
-            }
-            alertMessage.classList.add(bgColor);
-            clearTimeout(alertMessage.timer);
-            alertMessage.timer = setTimeout(() => {
-                alertMessage.classList.add('hidden');
-            }, duration);
-        }
-
-        /**
-         * رمز ويژنر جهاني (Vigenère Cipher) بر روي تمام کاراکترهاي يونيکد.
-         */
-        function vigenereCipher(text, keyword, decrypt = false) {
-            let result = '';
-            const CLEANED_KEYWORD = keyword.trim();
-            if (CLEANED_KEYWORD.length === 0) return text; 
-            const KEYWORD_LENGTH = CLEANED_KEYWORD.length;
-
-            for (let i = 0, j = 0; i < text.length; i++, j++) {
-                
-                // 1. Get Key Character Code Point
-                let keyCharIndex = j % KEYWORD_LENGTH;
-                let keyChar = CLEANED_KEYWORD.codePointAt(keyCharIndex);
-
-                // 2. Adjust keyword index for multi-byte characters (Emojis in key)
-                if (keyChar > 0xFFFF) j++; 
-                
-                // 3. Get Text Character Code Point
-                let textChar = text.codePointAt(i);
-
-                // 4. Adjust text index for multi-byte characters (Emojis in text)
-                if (textChar > 0xFFFF) i++; 
-                
-                // Calculate Shift
-                let shift = decrypt ? -keyChar : keyChar;
-
-                let newCodePoint = textChar + shift;
-                
-                // 5. Apply shift
-                result += String.fromCodePoint(newCodePoint);
-            }
-            return result;
-        }
-        
-        // --- Decoy Display Management ---
-        
-        function updateDecoyDisplay() {
-            const realLength = realInputText.value.length;
-            if (realLength === 0) {
-                decoyInputText.value = '';
-                decoyInputText.placeholder = 'ورودي را اينجا وارد کنيد...'; // Generic placeholder
-                return;
-            }
-            
-            // Repeat the phrase until it's longer than the real message, then truncate.
-            const repeatCount = Math.ceil(realLength / DECOY_PHRASE.length) + 1;
-            let decoyDisplay = DECOY_PHRASE.repeat(repeatCount).substring(0, realLength);
-            
-            // Set the visible value to the decoy text
-            decoyInputText.value = decoyDisplay;
-            
-            // Crucial: Keep the scroll position of the decoy aligned with the real input
-            decoyInputText.scrollTop = realInputText.scrollTop;
-        }
-
-        // --- Cipher Handlers ---
-
-        function handleEncryption() {
-            const realMessage = realInputText.value;
-            const keyword = keywordInput.value;
-
-            // Clear previous decryption state if any
-            decryptionOutput.value = '';
-            decryptionOutput.dataset.secret = '';
-            autoHideMessage.classList.add('hidden');
-            clearTimeout(autoHideTimer);
-
-            if (keyword.trim() === "") {
-                encryptionOutputText.value = "خطا: پارامتر لازم است.";
-                showAlert(encryptionOutputText.value, 4000);
-                return;
-            }
-            if (realMessage.trim() === "") {
-                 encryptionOutputText.value = "خطا: ورودي لازم است.";
-                 showAlert(encryptionOutputText.value, 3000);
-                return;
-            }
-
+        function base64Decode(str) {
             try {
-                // 1. Vigenere Encrypt (Raw Unicode string)
-                const realCipher = vigenereCipher(realMessage, keyword, false);
-                
-                // 2. Base64 Encode the RAW cipher (ASCII-safe string)
-                const base64Cipher = b64EncodeUnicode(realCipher);
-
-                // 3. Convert Base64 string to a completely invisible string of Zero-Width characters
-                const invisibleCipher = encodeToInvisible(base64Cipher);
-
-                // 4. Construct the final output: Visible Decoy Text + Invisible Cipher (DECOY_TEXT_FULL is now "")
-                const finalOutput = DECOY_TEXT_FULL + invisibleCipher;
-
-                // Output to the dedicated encryption output
-                encryptionOutputText.value = finalOutput;
-                
-                // پاکسازي ورودي پس از رمزگذاري موفق
-                realInputText.value = ''; // Clear the real secret
-                decoyInputText.value = ''; // Clear the decoy display
-                
-                showAlert("عمليات توليد موفق.", 5000);
+                const utf8Str = atob(str);
+                return decodeURIComponent(escape(utf8Str));
             } catch (e) {
-                encryptionOutputText.value = "خطا در پردازش. (Error: " + e.message + ")";
-                showAlert(encryptionOutputText.value, 7000);
-                console.error("Encryption Error:", e);
+                return "خطا در رمزگشايي Base64. (Error: Invalid Cipher Format)";
             }
         }
 
-        function handleDecryption() {
-            const encryptedText = decryptionInput.value.trim();
-            const keyword = keywordInput.value; 
+        function getKeyShift(key, index) {
+            return (key.charCodeAt(index % key.length) - START_ASCII);
+        }
 
-            // Always clear previous timer on new decryption attempt
-            clearTimeout(autoHideTimer); 
-            decryptionOutput.value = '';
-            decryptionOutput.dataset.secret = '';
-            autoHideMessage.classList.add('hidden');
+        function encrypt(plaintext) {
+            const base64Str = base64Encode(plaintext);
+            let ciphertext = "";
+            for (let i = 0; i < base64Str.length; i++) {
+                let charCode = base64Str.charCodeAt(i);
+                if (charCode >= START_ASCII && charCode <= END_ASCII) { 
+                    let keyShift = getKeyShift(SECRET_KEY, i);
+                    let shiftedCode = charCode - START_ASCII;
+                    let newShiftedCode = (shiftedCode + keyShift) % RANGE;
+                    ciphertext += String.fromCharCode(newShiftedCode + START_ASCII);
+                } else {
+                    ciphertext += base64Str[i]; 
+                }
+            }
+            return ciphertext;
+        }
 
+        function decrypt(ciphertext) {
+            let base64Str = "";
+            for (let i = 0; i < ciphertext.length; i++) {
+                let charCode = ciphertext.charCodeAt(i);
+                if (charCode >= START_ASCII && charCode <= END_ASCII) {
+                    let keyShift = getKeyShift(SECRET_KEY, i);
+                    let shiftedCode = charCode - START_ASCII;
+                    let newShiftedCode = (shiftedCode - keyShift + RANGE) % RANGE;
+                    base64Str += String.fromCharCode(newShiftedCode + START_ASCII);
+                } else {
+                    base64Str += ciphertext[i];
+                }
+            }
+            return base64Decode(base64Str);
+        }
+        
+        // --- توابع Stealth Mode ---
 
-            if (keyword.trim() === "") {
-                decryptionOutput.value = "خطا: پارامتر لازم است.";
-                showAlert(decryptionOutput.value, 4000);
+        function generateShortId() {
+            // توليد يک UUID کوتاه 16 کاراکتري
+            return Date.now().toString(36) + Math.random().toString(36).substring(2, 6) + crypto.randomUUID().substring(0, 4);
+        }
+
+        function encodeCharToStealth(char36) {
+            const index36 = BASE_36.indexOf(char36);
+            if (index36 === -1) return ''; 
+
+            const c1 = Math.floor(index36 / 16); 
+            const remaining = index36 % 16;
+            const c2 = Math.floor(remaining / 4); 
+            const c3 = remaining % 4; 
+            
+            return INVISIBLE_CHARS[c1] + INVISIBLE_CHARS[c2] + INVISIBLE_CHARS[c3];
+        }
+
+        function encodeIdToStealthKey(shortId) {
+            let stealthKey = STEALTH_TRIGGER_KEY; 
+            for (const char of shortId) {
+                stealthKey += encodeCharToStealth(char);
+            }
+            return stealthKey;
+        }
+
+        function decodeStealthKeyToId(stealthText) {
+            if (!stealthText.startsWith(STEALTH_TRIGGER_KEY)) return null;
+            let encodedBody = stealthText.substring(STEALTH_TRIGGER_KEY.length);
+            
+            let shortId = '';
+            
+            for (let i = 0; i < encodedBody.length; i += 3) {
+                if (i + 2 >= encodedBody.length) break; 
+
+                const char1 = encodedBody[i];
+                const char2 = encodedBody[i+1];
+                const char3 = encodedBody[i+2];
+
+                const c1Index = INVISIBLE_CHARS.indexOf(char1);
+                const c2Index = INVISIBLE_CHARS.indexOf(char2);
+                const c3Index = INVISIBLE_CHARS.indexOf(char3);
+                
+                if (c1Index === -1 || c2Index === -1 || c3Index === -1) break;
+
+                const index36 = (c1Index * 16) + (c2Index * 4) + c3Index;
+                
+                if (index36 >= BASE_36.length) break; 
+                
+                shortId += BASE_36.charAt(index36);
+            }
+            return shortId.length > 0 ? shortId : null;
+        }
+
+        // --- توابع Firestore ---
+        
+        function getCiphersCollectionRef() {
+             // مسیر عمومی برای پیام‌های کتابخانه
+             return collection(db, `artifacts/${appId}/public/data/ciphers`);
+        }
+        
+        function getCipherDocRef(cipherId) {
+             // مسیر سند خاص برای ذخیره و بازیابی
+             return doc(getCiphersCollectionRef(), cipherId);
+        }
+
+        async function saveCipherToFirebase(cipherText) {
+            const cipherId = generateShortId(); 
+            const cipherDocRef = getCipherDocRef(cipherId);
+            
+            await setDoc(cipherDocRef, {
+                cipher: cipherText,
+                createdAt: Date.now(), // ثبت زمان برای مرتب‌سازی
+                userId: userId, // ذخیره شناسه کاربر
+            });
+            
+            return cipherId;
+        }
+
+        async function getCipherFromFirebase(cipherId) {
+            const cipherDocRef = getCipherDocRef(cipherId);
+            const docSnap = await getDoc(cipherDocRef);
+            
+            if (docSnap.exists()) {
+                return docSnap.data().cipher;
+            } else {
+                return null;
+            }
+        }
+        
+        // --- منطق کتابخانه (Library) ---
+
+        function renderCiphers(ciphers) {
+            if (currentMode !== 'library') return;
+
+            if (ciphers.length === 0) {
+                resultsArea.innerHTML = `
+                    <div class="text-center mt-10 p-6 bg-gray-50 rounded-lg shadow-inner">
+                        <p class="text-gray-500 text-lg font-medium">هیچ پیامی در کتابخانه موجود نیست.</p>
+                        <p class="text-sm text-gray-400 mt-2">برای اضافه کردن، به تب "جستجو" برگردید و پیامی را رمزگذاری کنید.</p>
+                    </div>
+                `;
                 return;
             }
-            if (encryptedText === "") {
-                 decryptionOutput.value = "خطا: ورودي لازم است.";
-                 showAlert(decryptionOutput.value, 3000);
-                return;
-            }
 
+            const cards = ciphers.map(cipher => {
+                const date = cipher.createdAt ? new Date(cipher.createdAt).toLocaleString('fa-IR', {
+                    year: 'numeric', month: 'numeric', day: 'numeric', 
+                    hour: '2-digit', minute: '2-digit'
+                }) : 'نا مشخص';
+
+                // نمایش پیام و جزئیات در کارت
+                return `
+                    <div class="p-4 mb-4 bg-white border border-gray-200 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <p class="text-gray-800 text-base mb-2 break-words" style="direction: rtl;">${cipher.text}</p>
+                        <div class="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                            <span>تاریخ: ${date}</span>
+                            <!-- نمایش قسمتی از ID سند برای مرجع -->
+                            <span class="ltr:hidden rtl:block font-mono text-gray-400">${cipher.id.substring(0, 8)}...</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // محفظه‌ای با اسکرول برای پیام‌ها
+            resultsArea.innerHTML = `<div class="max-h-[60vh] overflow-y-auto pr-2">${cards}</div>`;
+        }
+
+        function setupLibraryListener() {
+            if (unsubscribeLibrary) {
+                unsubscribeLibrary(); // قطع شنونده قبلی
+                unsubscribeLibrary = null;
+            }
+            if (!isAuthReady || !db) return;
+
+            // نمایش لودر در ابتدا
+            resultsArea.innerHTML = `
+                <div class="text-center mt-10">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                    <p class="text-gray-500">در حال بارگذاری پیام‌های عمومی...</p>
+                </div>
+            `;
+            
+            const ciphersRef = getCiphersCollectionRef();
+            
+            // onSnapshot برای رصد در لحظه
+            unsubscribeLibrary = onSnapshot(ciphersRef, (snapshot) => {
+                const cipherList = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.cipher) {
+                        try {
+                            const decryptedText = decrypt(data.cipher);
+                            // اضافه کردن فقط پیام‌های معتبر و رمزگشایی شده
+                            if (decryptedText && !decryptedText.startsWith("خطا")) {
+                                cipherList.push({
+                                    id: doc.id,
+                                    text: decryptedText,
+                                    createdAt: data.createdAt 
+                                });
+                            }
+                        } catch (e) {
+                            console.error("Error decrypting cipher in library:", e);
+                        }
+                    }
+                });
+                
+                // مرتب‌سازی سمت کاربر بر اساس زمان ساخت (جدیدترین‌ها اول)
+                cipherList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                renderCiphers(cipherList);
+            }, (error) => {
+                console.error("Error setting up library listener:", error);
+                resultsArea.innerHTML = `<p class="text-center text-red-500 mt-10">خطا در بارگذاري کتابخانه پیام‌ها. (لطفاً اتصال خود را بررسی کنید)</p>`;
+            });
+        }
+
+
+        // --- راه‌اندازي فايربيس ---
+        async function setupFirebase() {
             try {
-                // 1. Extract the invisible part (everything after the decoy text)
-                // Since DECOY_TEXT_FULL is "", this takes the entire input string
-                const invisibleCipher = encryptedText.substring(DECOY_TEXT_FULL.length);
+                setLogLevel('Debug');
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-                if (invisibleCipher.length === 0) {
-                     decryptionOutput.value = "خطا: داده نامعتبر.";
-                    showAlert(decryptionOutput.value, 7000);
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userInfoDisplay.textContent = `User: ${userId.substring(0, 8)}...`;
+                        isAuthReady = true;
+                        // اگر در حالت کتابخانه بود، Listener را فعال کن.
+                        if (currentMode === 'library') {
+                            setupLibraryListener();
+                        }
+                    } else {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("خطا در راه‌اندازي فايربيس (Auth/DB):", error);
+                // تنها پيام خطاي سيستمي در اينجا مجاز است.
+                displayError("خطا در اتصال به سرويس. لطفاً مرورگر را رفرش کنيد.");
+            }
+        }
+        
+        // --- منطق تغيير حالت (Mode Switching) ---
+
+        function switchMode(mode) {
+            // قطع شنونده کتابخانه قبل از تغییر حالت
+            if (unsubscribeLibrary) {
+                unsubscribeLibrary();
+                unsubscribeLibrary = null;
+            }
+            
+            currentMode = mode;
+            
+            // پاکسازي حالت فعال از همه تب‌ها
+            searchTab.classList.remove('tab-active');
+            newsTab.classList.remove('tab-active');
+            libraryTab.classList.remove('tab-active');
+            mapsTab.classList.remove('tab-active');
+            
+            searchInput.value = '';
+            resultsArea.innerHTML = '';
+            decryptionBox.classList.add('hidden');
+            modeStatus.innerHTML = ''; 
+
+            // تنظيم حالت فعال بر اساس کليک
+            let activeTabElement;
+            let placeholderText = ""; 
+            let statusHTML = ""; 
+            let inputDirection = 'rtl';
+            
+            // مدیریت نمایش کادر ورودی
+            searchInput.classList.remove('hidden');
+
+            if (mode === 'encode') {
+                activeTabElement = searchTab;
+                inputDirection = 'rtl';
+                placeholderText = "متن خود را وارد و Enter کنید تا رمزگذاری شود...";
+                
+            } else if (mode === 'decode') {
+                activeTabElement = newsTab;
+                inputDirection = 'ltr'; 
+                placeholderText = "کلید نامرئی را اینجا کپی کنید...";
+                
+            } else if (mode === 'library') {
+                activeTabElement = libraryTab;
+                inputDirection = 'rtl';
+                placeholderText = "جستجو در پیام‌های کتابخانه (فقط نمایش).";
+                searchInput.classList.add('hidden'); // پنهان کردن کادر ورودی در حالت کتابخانه
+                
+                // شروع شنونده کتابخانه
+                if (isAuthReady && db) {
+                    setupLibraryListener();
+                }
+
+            } else if (mode === 'maps') {
+                activeTabElement = mapsTab;
+                inputDirection = 'rtl';
+                placeholderText = "نقشه‌ها (عملیات تعریف نشده)";
+            }
+            
+            if (activeTabElement) {
+                activeTabElement.classList.add('tab-active');
+            }
+
+            // اعمال تغييرات به DOM
+            searchInput.placeholder = placeholderText; 
+            modeStatus.innerHTML = statusHTML; 
+            searchInput.style.direction = inputDirection;
+            
+            searchInput.focus();
+        }
+
+        // --- منطق مشترک براي پردازش ورودي ---
+        function handleInput(e) {
+            // جلوگیری از پردازش ورودی در حالت کتابخانه
+            if (currentMode === 'library' || currentMode === 'maps') return;
+            
+            decryptionBox.classList.add('hidden');
+            resultsArea.innerHTML = ''; // پاکسازي نتايج قبلي
+            modeStatus.innerHTML = ''; // حذف هرگونه پيام وضعيت
+            
+            const query = searchInput.value;
+
+            // 1. منطق رمزگذاري (فقط با Enter در حالت Encode)
+            if (currentMode === 'encode' && e.type === 'keydown' && e.key === 'Enter') {
+                e.preventDefault(); 
+                const queryTrimmed = query.trim();
+                if (!queryTrimmed) return; 
+
+                searchInput.value = ''; 
+                
+                // نمايش فقط لودر (Spinner) براي شبيه‌سازي جستجو
+                resultsArea.innerHTML = `
+                    <div class="text-center mt-10">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    </div>
+                `;
+
+                encryptAndSave(queryTrimmed);
+            
+            // 2. منطق رمزگشايي (بلافاصله با Input در حالت Decode)
+            } else if (currentMode === 'decode' && e.type === 'input') {
+                
+                clearTimeout(window.decodeTimer); 
+
+                if (query.length === 0) {
                     return;
                 }
-
-                // 2. Decode the invisible string back to Base64 ASCII string
-                const base64Cipher = decodeFromInvisible(invisibleCipher);
-
-                // 3. Base64 Decode the string to get the RAW Vigenere cipher text
-                const realCipher = b64DecodeUnicode(base64Cipher);
-
-                // 4. Decrypt the real cipher text
-                const decryptedText = vigenereCipher(realCipher, keyword, true); 
                 
-                // --- IMMEDIATE REVEAL & AUTO-HIDE (5 SECONDS) ---
-                decryptionOutput.value = decryptedText; 
-                // autoHideMessage.classList.remove('hidden'); // Removed visual hint
+                window.decodeTimer = setTimeout(() => {
+                    decryptAndFetch(query);
+                }, 250); 
+            }
+            
+            // 3. اگر حالت تصاوير يا نقشه‌ها فعال باشد، هيچ کاري انجام نمي‌دهيم تا طبيعي به نظر برسد.
+        }
+        
+        // --- توابع اصلي پردازش ---
 
-                decryptionInput.value = ''; // Clear input after successful decryption
-                showAlert("پردازش موفق.", 5000);
+        async function encryptAndSave(plaintext) {
+            if (!isAuthReady || !db) {
+                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست.");
+                return;
+            }
 
-                // Set auto-hide timer (5 seconds = 5000ms)
-                autoHideTimer = setTimeout(() => {
-                    decryptionOutput.value = ''; // Clear the message completely
-                    decryptionOutput.placeholder = "نتيجه پردازش اينجا نمايش داده مي‌شود.";
-                    // autoHideMessage.classList.add('hidden'); // Removed visual hint
-                    showAlert("پنهان‌سازي خودکار.", 2000);
-                }, 5000); // 5 seconds delay
+            try {
+                const cipherText = encrypt(plaintext);
+                const cipherId = await saveCipherToFirebase(cipherText);
+                
+                // نمايش خطاي جعلي مرورگر در ناحيه نتايج
+                showFakeBrowserError(cipherId);
 
-            } catch (e) {
-                decryptionOutput.value = "خطا در پردازش. لطفاً از صحت پارامتر و داده ورودي مطمئن شويد.";
-                showAlert(decryptionOutput.value, 7000);
-                console.error("Decryption error:", e);
+            } catch (error) {
+                console.error("خطا در رمزگذاري و ذخيره:", error);
+                displayError("خطا در ذخيره‌سازي رمز در پايگاه داده.");
             }
         }
 
-        function copyToClipboard() {
-            if (encryptionOutputText.value) {
-                // Select the text for copying (including the hidden parts)
-                encryptionOutputText.select(); 
-                document.execCommand('copy');
+        async function decryptAndFetch(stealthKeyInput) {
+            if (!isAuthReady || !db) {
+                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست.");
+                return;
+            }
+            
+            const cipherId = decodeStealthKeyToId(stealthKeyInput);
+
+            if (!cipherId) {
+                resultsArea.innerHTML = '';
+                // در صورت خطا، پيام خطاي نامحسوس را در کادر نمايش مي‌دهيم.
+                displayDecryptedResult("خطا در بارگذاري محتوا. ممکن است اتصال ضعيف باشد.", true);
+                return;
+            }
+
+            // لودر را در ناحيه نتايج نمايش مي‌دهيم (کاملاً شبيه به جستجوي واقعي)
+            resultsArea.innerHTML = `
+                <div class="text-center mt-10">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+                    <p class="text-gray-500">در حال بازيابي اطلاعات... (ID: ${cipherId})...</p>
+                </div>
+            `;
+            
+            try {
+                const cipherText = await getCipherFromFirebase(cipherId);
+
+                if (cipherText) {
+                    const decryptedTextResult = decrypt(cipherText);
+                    searchInput.value = ''; 
+                    // در صورت موفقيت، فقط کادر را نمايش مي‌دهيم.
+                    displayDecryptedResult(decryptedTextResult, false); 
+                } else {
+                    // پيام خطاي نامحسوس در صورت عدم وجود کليد در ديتابيس
+                    displayDecryptedResult(`خطا در بازيابي اطلاعات. سرور در دسترس نيست.`, true);
+                }
+            } catch (error) {
+                 console.error("خطا در بازيابي و رمزگشايي:", error);
+                 displayDecryptedResult("خطاي غيرمنتظره در ارتباط با پايگاه داده.", true);
+            }
+        }
+        
+        // --- توابع کمکي DOM ---
+
+        function copyToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '0';
+            textarea.style.width = '1px';
+            textarea.style.height = '1px';
+            textarea.style.opacity = '0'; 
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.setSelectionRange(0, textarea.value.length); 
+            let success = false;
+            try {
+                success = document.execCommand('copy');
+            } catch (err) {
+                console.error('Failed to copy text', err);
+            }
+            document.body.removeChild(textarea);
+            return success;
+        }
+
+        function displayError(message) {
+            resultsArea.innerHTML = `
+                <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg" role="alert">
+                    <p class="font-bold mb-1">خطا:</p>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+        
+        // --- توابع جديد براي خطاي جعلي مرورگر در صفحه ---
+
+        function showFakeBrowserError(cipherId) {
+            const stealthKey = encodeIdToStealthKey(cipherId);
+            const errorId = crypto.randomUUID().substring(0, 12);
+
+            resultsArea.innerHTML = `
+                <div class="flex items-start bg-white p-6 border border-gray-300 rounded-lg shadow-xl text-left rtl:text-right" style="direction: ltr;">
+                    <!-- Icon -->
+                    <svg class="w-8 h-8 text-red-500 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    
+                    <!-- Content -->
+                    <div class="ml-4 text-gray-800 flex-grow">
+                        <h3 class="text-xl font-bold mb-1" style="font-family: 'Roboto', sans-serif;">ERR_CACHE_WRITE_FAILURE</h3>
+                        <p class="text-sm mb-3">
+                            The search engine could not process the request due to an unhandled security exception (Error Code: <span class="font-mono text-xs">${errorId}</span>). 
+                            This may be a temporary issue with browser storage or content policies.
+                        </p>
+                        
+                        <!-- Retry Button (The Copy Mechanism) -->
+                        <button id="retry-copy-btn" 
+                                class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors shadow-md text-sm">
+                            Retry
+                        </button>
+                        
+                        <p id="copy-status-message" class="text-xs mt-3 h-4 text-gray-600">
+                            <!-- Status message appears here -->
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            // افزودن شنونده به دکمه Retry جديد
+            const retryButton = document.getElementById('retry-copy-btn');
+            const statusMessage = document.getElementById('copy-status-message');
+            const originalButtonText = retryButton.textContent; // "Retry"
+
+            retryButton.addEventListener('click', () => {
+                if (copyToClipboard(stealthKey)) {
+                    // --- تغييرات جديد: حذف پيام متني و فقط تغيير بصري ---
+                    statusMessage.innerHTML = ''; // پيام وضعيت را خالي نگه مي‌داريم
+                    retryButton.classList.remove('bg-blue-600', 'bg-red-600');
+                    retryButton.classList.add('bg-green-600');
+                    // *** خطي که متن دکمه را به 'Copied' تغيير مي‌داد حذف شد. ***
+
+                    // پاک کردن پيام پس از 3 ثانيه براي بازگشت به حالت اوليه
+                    setTimeout(() => {
+                        resultsArea.innerHTML = '';
+                        // اطمينان از بازگشت دکمه به رنگ آبي اصلي (گرچه با حذف resultsArea ديگر مهم نيست)
+                        // اما براي تميزي کد:
+                        retryButton.classList.remove('bg-green-600');
+                        retryButton.classList.add('bg-blue-600'); 
+                        retryButton.textContent = originalButtonText;
+
+                        searchInput.focus();
+                    }, 3000);
+                    
+                } else {
+                    // در صورت خطاي کپي، پيام خطا را نمايش مي‌دهيم.
+                    statusMessage.innerHTML = '<span class="text-red-600 font-bold">Error:</span> Manual copy failed. Please try reloading.';
+                    retryButton.classList.remove('bg-blue-600');
+                    retryButton.classList.add('bg-red-600');
+                    retryButton.textContent = originalButtonText; // اطمينان از حفظ متن اصلي
+                }
+            });
+        }
+
+        function displayDecryptedResult(textResult, isError) {
+            
+            decryptedText.textContent = textResult;
+            decryptionBox.classList.remove('hidden');
+            decryptionBox.classList.remove('fade-out'); 
+            
+            const titleElement = decryptionBox.querySelector('p.font-bold');
+
+            // در حالت موفقيت (Success)
+            if (!isError) {
+                // متن رمزگشايي شده با رنگ عادي (خاکستري تيره) نمايش داده مي‌شود
+                decryptedText.classList.remove('text-red-500'); 
+                decryptedText.classList.add('text-gray-800');
+                titleElement.textContent = "";
+
+            // در حالت خطا (Error)
+            } else {
+                 // پيام خطاي نامحسوس
+                 decryptedText.classList.remove('text-gray-800');
+                 decryptedText.classList.add('text-red-500'); // براي نشان دادن خطا
+                 titleElement.textContent = "";
+            }
+
+            // منطق 4 ثانيه‌اي: 3.5 ثانيه نمايش + 0.5 ثانيه محو شدن
+            setTimeout(() => { 
+                // 1. شروع محو شدن
+                decryptionBox.classList.add('fade-out'); 
+                
+                // 2. پنهان کردن کامل بعد از اتمام انيميشن محو شدن (0.5 ثانيه)
                 setTimeout(() => {
-                    encryptionOutputText.blur();
-                }, 500);
-                showAlert("کپي شد.", 2500);
-            }
-        }
-        
-        function clearAllFields() {
-            clearTimeout(autoHideTimer); // Clear auto-hide timer
-            
-            realInputText.value = ''; 
-            decoyInputText.value = ''; 
-            encryptionOutputText.value = '';
-            decryptionInput.value = ''; 
-            decryptionOutput.value = ''; 
-            decryptionOutput.dataset.secret = ''; // Clear stored secret
-            autoHideMessage.classList.add('hidden'); // Keep hidden
+                    decryptionBox.classList.add('hidden');
+                    decryptionBox.classList.remove('fade-out');
+                    modeStatus.innerHTML = ''; 
+                    searchInput.focus(); 
+                }, 500); // 500ms = مدت زمان انيميشن در CSS
 
-            decoyInputText.placeholder = 'ورودي را اينجا وارد کنيد...'; // Reset placeholder
-            decryptionOutput.placeholder = "نتيجه پردازش اينجا نمايش داده مي‌شود."; // Reset placeholder
-            
-            realInputText.focus();
-            showAlert("پاکسازي انجام شد.", 2000);
+            }, 3500); // 3500ms = مدت زمان نمايش قبل از شروع محو شدن
         }
 
-        // --- Event Listeners ---
+        // --- مديريت رويدادها ---
+
+        searchTab.addEventListener('click', () => switchMode('encode'));
+        newsTab.addEventListener('click', () => switchMode('decode'));
+        libraryTab.addEventListener('click', () => switchMode('library')); // فعال‌سازی حالت کتابخانه
+        mapsTab.addEventListener('click', () => switchMode('maps'));
+
+        searchInput.addEventListener('keydown', handleInput); 
+        searchInput.addEventListener('input', handleInput); 
         
-        // Handle input events on the REAL input to update the visual decoy
-        realInputText.addEventListener('input', updateDecoyDisplay);
-        
-        // Keep the decoy's scroll aligned with the real input (for long messages)
-        realInputText.addEventListener('scroll', () => {
-             decoyInputText.scrollTop = realInputText.scrollTop;
-        });
+        // --- مقداردهي اوليه ---
+        setupFirebase();
+        switchMode('encode'); 
 
-        // ENCRYPTION - Enter Key Listener (Use realInputText)
-        realInputText.addEventListener('keydown', (e) => {
-            // Check for Enter key (not Shift+Enter)
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); 
-                handleEncryption();
-            }
-        });
-
-        // DECRYPTION - Enter Key Listener
-        decryptionInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); 
-                handleDecryption();
-            }
-        });
-
-
-        // Button listeners
-        encryptBtn.addEventListener('click', handleEncryption);
-        decryptBtn.addEventListener('click', handleDecryption);
-        copyBtn.addEventListener('click', copyToClipboard);
-        clearBtn.addEventListener('click', clearAllFields); 
-
-        // Save keyword to localStorage on every change
-        keywordInput.addEventListener('input', (e) => {
-             localStorage.setItem(KEYWORD_STORAGE_KEY, e.target.value);
-        });
     </script>
 </body>
 </html>
