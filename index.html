@@ -450,12 +450,18 @@
                 });
 
             } catch (error) {
-                console.error("خطا در راه‌اندازي فايربيس (Auth/DB):", error);
-                // اگر اتصال به Firebase کلاً شکست خورد، یک خطای دائمی نمایش بده
+                // --- منطق اشکال‌زدایی جدید ---
+                console.error("Firebase Setup Error:", error.code, error.message);
+                
+                let errorMessage = "برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.";
+                if (error.code && error.message) {
+                    errorMessage = `خطا در راه‌اندازی (کد: ${error.code}). اطلاعات بیشتر در کنسول ثبت شد.`;
+                }
+
                 resultsArea.innerHTML = `
                     <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg mt-10" role="alert">
                         <p class="font-bold mb-1">خطای بحرانی در اتصال:</p>
-                        <p>برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.</p>
+                        <p>${errorMessage}</p>
                     </div>
                 `;
             }
@@ -796,7 +802,6 @@
         
         // --- مقداردهي اوليه ---
         setupFirebase();
-        // switchMode('encode'); // این دستور حذف شد تا منتظر آماده شدن احراز هویت بماند
     </script>
 </body>
 </html>
