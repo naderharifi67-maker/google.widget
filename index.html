@@ -12,8 +12,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         
         body {
-            /* استک فونت مقاوم: Vazirmatn، سپس یک فونت سیستمی فارسی (مثل Tahoma که در ویندوز رایج است) و در نهایت فونت‌های عمومی */
-            font-family: 'Vazirmatn', Tahoma, 'Roboto', Arial, sans-serif;
+            /* استک فونت مقاوم: Tahoma و Arial برای پشتیبانی مطمئن از فارسی، سپس Vazirmatn و بقیه */
+            font-family: 'Vazirmatn', Tahoma, Arial, 'Roboto', sans-serif;
             background-color: #ffffff;
             color: #202124;
         }
@@ -36,7 +36,7 @@
             @apply text-indigo-700 border-indigo-700 !important;
         }
 
-        /* استايل براي محل نمايش اطلاعات کاربر (تصحيح شده) */
+        /* استايل براي محل نمايش اطلاعات کاربر (تصحیح شده) */
         #user-info-display {
             color: #9c9c9c; /* خاکستری روشن برای مخفی بودن نسبی */
             font-size: 0.7rem;
@@ -51,8 +51,9 @@
         }
         
         #decrypted-text {
+            /* استک فونت محکم برای متون رمزگشایی شده */
             direction: rtl; 
-            font-family: 'Vazirmatn', Tahoma, sans-serif; 
+            font-family: 'Vazirmatn', Tahoma, Arial, sans-serif; 
         }
         
         .main-header {
@@ -74,7 +75,7 @@
                 <span class="text-blue-500">G</span><span class="text-red-500">o</span><span class="text-yellow-500">o</span><span class="text-blue-500">g</span><span class="text-green-500">l</span><span class="text-red-500">e</span>
             </div>
             
-            <!-- User Info (تصحیح شده: کلاس hidden-result حذف شد) -->
+            <!-- User Info (اطلاعات کاربر) -->
             <div id="user-info-display" class="md:inline-block"></div>
         </div>
         
@@ -110,7 +111,6 @@
         </div>
 
         <!-- Decryption Result Display (Hidden initially, appears on News mode success/failure) -->
-        <!-- اطمینان از پنهان بودن این کادر در بارگذاری اولیه -->
         <div id="decryption-box" class="hidden p-3 text-center" role="alert">
             <p class="font-bold mb-2"></p>
             <p id="decrypted-text" class="text-base text-gray-800"></p>
@@ -118,7 +118,11 @@
 
         <!-- Dynamic Search Results Area -->
         <div id="results-area" class="mt-8">
-            <!-- Results will be dynamically inserted here -->
+            <!-- Initial loading message added here -->
+             <div class="text-center mt-10" id="initial-loading">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p class="text-gray-500">در حال راه‌اندازی برنامه...</p>
+            </div>
         </div>
     </main>
 
@@ -160,6 +164,7 @@
         const decryptedText = document.getElementById('decrypted-text');
         const userInfoDisplay = document.getElementById('user-info-display');
         const resultsArea = document.getElementById('results-area');
+        const initialLoading = document.getElementById('initial-loading'); // عنصر بارگذاری اولیه
         
         // --- پيکربندي و کليد رمز ---
         const SECRET_KEY = "GEMINI-CODE-25"; 
@@ -407,6 +412,11 @@
 
         // --- راه‌اندازي فايربيس ---
         async function setupFirebase() {
+            // حذف پیام لودینگ اولیه از UI
+            if (initialLoading) {
+                initialLoading.remove();
+            }
+            
             try {
                 setLogLevel('Debug');
                 const app = initializeApp(firebaseConfig);
@@ -435,7 +445,13 @@
 
             } catch (error) {
                 console.error("خطا در راه‌اندازي فايربيس (Auth/DB):", error);
-                // خطا را فقط در کنسول نمایش می‌دهیم و از نمایش آن در UI در هنگام راه‌اندازی اولیه جلوگیری می‌کنیم
+                // اگر اتصال به Firebase کلاً شکست خورد، یک خطای دائمی نمایش بده
+                resultsArea.innerHTML = `
+                    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg mt-10" role="alert">
+                        <p class="font-bold mb-1">خطای بحرانی در اتصال:</p>
+                        <p>برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.</p>
+                    </div>
+                `;
             }
         }
         
@@ -488,6 +504,14 @@
                 // شروع شنونده کتابخانه
                 if (isAuthReady && db) {
                     setupLibraryListener();
+                } else if (!isAuthReady) {
+                    // نمایش پیام لودینگ اگر Auth هنوز آماده نیست
+                     resultsArea.innerHTML = `
+                        <div class="text-center mt-10">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                            <p class="text-gray-500">در انتظار اتصال امن...</p>
+                        </div>
+                    `;
                 }
 
             } else if (mode === 'maps') {
