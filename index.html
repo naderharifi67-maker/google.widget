@@ -145,7 +145,10 @@
 
         // --- متغيرهاي گلوبال فايربيس ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // بررسی ایمن وجود متغیر و سپس تبدیل به JSON
+        const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config) 
+            ? JSON.parse(__firebase_config) 
+            : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let db, auth;
@@ -415,6 +418,15 @@
         async function setupFirebase() {
             try {
                 setLogLevel('Debug');
+                
+                // --- بررسي بحراني: اعتبار پیکربندی ---
+                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
+                    console.error("Firebase Configuration is Missing or Empty:", firebaseConfig);
+                    // خطا را به صورت دستی پرتاب می‌کنیم تا پیام دقیق‌تری نمایش داده شود
+                    throw new Error("P002: Firebase configuration is missing or malformed (No API Key).");
+                }
+
+
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -450,18 +462,30 @@
                 });
 
             } catch (error) {
-                // --- منطق اشکال‌زدایی جدید ---
-                console.error("Firebase Setup Error:", error.code, error.message);
+                // --- منطق اشکال‌زدایی به‌روز شده ---
+                let errorMessage;
+                let errorCode = "نا مشخص";
                 
-                let errorMessage = "برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.";
-                if (error.code && error.message) {
-                    errorMessage = `خطا در راه‌اندازی (کد: ${error.code}). اطلاعات بیشتر در کنسول ثبت شد.`;
+                if (error.message.startsWith("P002")) {
+                    // خطای داخلی ما برای پیکربندی نامعتبر
+                    errorMessage = "پیکربندی فایربیس (Firebase Config) در محیط اجرا موجود یا معتبر نیست.";
+                    errorCode = "P002-Config-Missing";
+                } else {
+                    // خطای عمومی فایربیس
+                    console.error("Firebase Setup Error:", error.code, error.message);
+                    errorMessage = `برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.`;
+                    if (error.code) {
+                        errorMessage = `خطا در راه‌اندازی. اطلاعات بیشتر (کد: ${error.code}) در کنسول ثبت شد.`;
+                        errorCode = error.code;
+                    }
                 }
-
+                
+                // نمایش پیام خطا در UI
                 resultsArea.innerHTML = `
                     <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg mt-10" role="alert">
                         <p class="font-bold mb-1">خطای بحرانی در اتصال:</p>
                         <p>${errorMessage}</p>
+                        <p class="mt-2 text-xs text-gray-600">کد خطا: ${errorCode}</p>
                     </div>
                 `;
             }
