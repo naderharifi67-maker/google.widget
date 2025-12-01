@@ -7,12 +7,13 @@
     <!-- Tailwind CSS CDN for modern and responsive styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* استفاده از فونت استاندارد براي شبيه‌سازي ظاهر گوگل */
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        /* استفاده از فونت Vazirmatn به عنوان اولویت، با fallback قوی به فونت‌های سیستمی فارسی/عربی */
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         
         body {
-            font-family: 'Vazirmatn', 'Roboto', sans-serif;
+            /* استک فونت مقاوم: Tahoma و Arial برای پشتیبانی مطمئن از فارسی، سپس Vazirmatn و بقیه */
+            font-family: 'Vazirmatn', Tahoma, Arial, 'Roboto', sans-serif;
             background-color: #ffffff;
             color: #202124;
         }
@@ -35,11 +36,12 @@
             @apply text-indigo-700 border-indigo-700 !important;
         }
 
-        /* استايل براي محل مخفي نمايش رمز */
-        .hidden-result {
-            color: #dadce0; 
+        /* استايل براي محل نمايش اطلاعات کاربر (تصحيح شده) */
+        #user-info-display {
+            color: #9c9c9c; /* خاکستری روشن برای مخفی بودن نسبی */
             font-size: 0.7rem;
-            direction: ltr;
+            direction: ltr; /* اطمینان از نمایش صحیح متن انگلیسی */
+            font-family: 'Roboto', monospace; /* استفاده از فونت انگلیسی مطمئن */
         }
 
         /* انيميشن محو شدن براي نتيجه رمزگشايي - 0.5 ثانيه */
@@ -49,16 +51,15 @@
         }
         
         #decrypted-text {
+            /* استک فونت محکم برای متون رمزگشایی شده */
             direction: rtl; 
-            font-family: 'Vazirmatn', sans-serif; 
+            font-family: 'Vazirmatn', Tahoma, Arial, sans-serif; 
         }
         
-        /* حذف خط پيش‌فرض خاکستري از زير هدر که باعث ايجاد خط ناخواسته مي‌شد */
         .main-header {
-            @apply w-full border-b-0; /* خط زيرين هدر اصلي را پاک مي‌کنيم */
+            @apply w-full border-b-0;
         }
         
-        /* خط خاکستري ملايم فقط به پايين نوار ناوبري (nav) اضافه مي‌شود تا تب‌ها را از محتواي زيرين جدا کند */
         .nav-bar {
             @apply border-b border-gray-200;
         }
@@ -74,16 +75,16 @@
                 <span class="text-blue-500">G</span><span class="text-red-500">o</span><span class="text-yellow-500">o</span><span class="text-blue-500">g</span><span class="text-green-500">l</span><span class="text-red-500">e</span>
             </div>
             
-            <!-- User Info -->
-            <div id="user-info-display" class="hidden-result md:inline-block"></div>
+            <!-- User Info (اطلاعات کاربر) -->
+            <div id="user-info-display" class="md:inline-block"></div>
         </div>
         
         <!-- Search Tabs (Key for switching modes) -->
         <nav class="nav-bar max-w-6xl mx-auto px-4">
             <div class="flex space-x-6 space-x-reverse">
                 <button id="search-tab" class="tab-button tab-active">جستجو</button>
-                <button id="news-tab" class="tab-button">اخبار</button>
-                <button id="images-tab" class="tab-button">تصاوير</button>
+                <button id="news-tab" class="tab-button">رمزگشایی</button>
+                <button id="library-tab" class="tab-button">کتابخانه</button> 
                 <button id="maps-tab" class="tab-button">نقشه‌ها</button>
             </div>
         </nav>
@@ -100,6 +101,7 @@
                 autocomplete="off" 
                 class="w-full p-3 pl-10 border border-gray-300 rounded-full shadow-md focus:shadow-lg focus:border-indigo-500 outline-none text-base"
                 autofocus
+                disabled 
             >
             <!-- Search Icon -->
             <svg class="w-5 h-5 absolute top-3 left-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -107,21 +109,21 @@
 
         <!-- Mode Status & Decrypted Result Area (Now completely empty) -->
         <div id="mode-status" class="text-center mb-6 text-lg font-semibold text-gray-600">
-            <!-- اين قسمت هميشه خالي است تا هيچ متني ظاهر نشود -->
         </div>
 
         <!-- Decryption Result Display (Hidden initially, appears on News mode success/failure) -->
-        <!-- کادر بدون هيچ استايل هشداري، فقط يک ديو پنهان است -->
         <div id="decryption-box" class="hidden p-3 text-center" role="alert">
-            <!-- اين پاراگراف براي عنوان بود که حالا خالي مي‌ماند -->
             <p class="font-bold mb-2"></p>
-            <!-- متن رمزگشايي شده با اندازه و رنگ عادي -->
             <p id="decrypted-text" class="text-base text-gray-800"></p>
         </div>
 
         <!-- Dynamic Search Results Area -->
         <div id="results-area" class="mt-8">
-            <!-- Results will be dynamically inserted here -->
+            <!-- Initial loading message added here -->
+             <div class="text-center mt-10" id="initial-loading">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p class="text-gray-500">در حال راه‌اندازی برنامه و اتصال امن...</p>
+            </div>
         </div>
     </main>
 
@@ -138,7 +140,8 @@
         // --- واردات ماژول‌هاي فايربيس ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // واردات مورد نیاز برای رصد لحظه‌ای (onSnapshot) و کوئری‌ها
+        import { getFirestore, doc, setDoc, getDoc, setLogLevel, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- متغيرهاي گلوبال فايربيس ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -149,18 +152,20 @@
         let userId = null;
         let isAuthReady = false;
         let currentMode = 'encode'; 
+        let unsubscribeLibrary = null; // برای نگهداری و قطع کردن شنونده Firestore
         
         // --- عناصر DOM ---
         const searchInput = document.getElementById('search-input');
         const searchTab = document.getElementById('search-tab');
         const newsTab = document.getElementById('news-tab');
-        const imagesTab = document.getElementById('images-tab');
+        const libraryTab = document.getElementById('library-tab'); 
         const mapsTab = document.getElementById('maps-tab');
         const modeStatus = document.getElementById('mode-status');
         const decryptionBox = document.getElementById('decryption-box');
         const decryptedText = document.getElementById('decrypted-text');
         const userInfoDisplay = document.getElementById('user-info-display');
         const resultsArea = document.getElementById('results-area');
+        const initialLoading = document.getElementById('initial-loading'); // عنصر بارگذاری اولیه
         
         // --- پيکربندي و کليد رمز ---
         const SECRET_KEY = "GEMINI-CODE-25"; 
@@ -284,9 +289,14 @@
 
         // --- توابع Firestore ---
         
+        function getCiphersCollectionRef() {
+             // مسیر عمومی برای پیام‌های کتابخانه
+             return collection(db, `artifacts/${appId}/public/data/ciphers`);
+        }
+        
         function getCipherDocRef(cipherId) {
-             const path = `artifacts/${appId}/public/data/ciphers`;
-             return doc(db, path, cipherId);
+             // مسیر سند خاص برای ذخیره و بازیابی
+             return doc(getCiphersCollectionRef(), cipherId);
         }
 
         async function saveCipherToFirebase(cipherText) {
@@ -295,7 +305,8 @@
             
             await setDoc(cipherDocRef, {
                 cipher: cipherText,
-                createdAt: Date.now(),
+                createdAt: Date.now(), // ثبت زمان برای مرتب‌سازی
+                userId: userId, // ذخیره شناسه کاربر
             });
             
             return cipherId;
@@ -311,6 +322,94 @@
                 return null;
             }
         }
+        
+        // --- منطق کتابخانه (Library) ---
+
+        function renderCiphers(ciphers) {
+            if (currentMode !== 'library') return;
+
+            if (ciphers.length === 0) {
+                resultsArea.innerHTML = `
+                    <div class="text-center mt-10 p-6 bg-gray-50 rounded-lg shadow-inner">
+                        <p class="text-gray-500 text-lg font-medium">هیچ پیامی در کتابخانه موجود نیست.</p>
+                        <p class="text-sm text-gray-400 mt-2">برای اضافه کردن، به تب "جستجو" برگردید و پیامی را رمزگذاری کنید.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const cards = ciphers.map(cipher => {
+                const date = cipher.createdAt ? new Date(cipher.createdAt).toLocaleString('fa-IR', {
+                    year: 'numeric', month: 'numeric', day: 'numeric', 
+                    hour: '2-digit', minute: '2-digit'
+                }) : 'نا مشخص';
+
+                // نمایش پیام و جزئیات در کارت
+                return `
+                    <div class="p-4 mb-4 bg-white border border-gray-200 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <p class="text-gray-800 text-base mb-2 break-words" style="direction: rtl;">${cipher.text}</p>
+                        <div class="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+                            <span>تاریخ: ${date}</span>
+                            <!-- نمایش قسمتی از ID سند برای مرجع -->
+                            <span class="ltr:hidden rtl:block font-mono text-gray-400">${cipher.id.substring(0, 8)}...</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // محفظه‌ای با اسکرول برای پیام‌ها
+            resultsArea.innerHTML = `<div class="max-h-[60vh] overflow-y-auto pr-2">${cards}</div>`;
+        }
+
+        function setupLibraryListener() {
+            if (unsubscribeLibrary) {
+                unsubscribeLibrary(); // قطع شنونده قبلی
+                unsubscribeLibrary = null;
+            }
+            if (!isAuthReady || !db) return;
+
+            // نمایش لودر در ابتدا
+            resultsArea.innerHTML = `
+                <div class="text-center mt-10">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                    <p class="text-gray-500">در حال بارگذاری پیام‌های عمومی...</p>
+                </div>
+            `;
+            
+            const ciphersRef = getCiphersCollectionRef();
+            
+            // onSnapshot برای رصد در لحظه
+            unsubscribeLibrary = onSnapshot(ciphersRef, (snapshot) => {
+                const cipherList = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.cipher) {
+                        try {
+                            const decryptedText = decrypt(data.cipher);
+                            // اضافه کردن فقط پیام‌های معتبر و رمزگشایی شده
+                            if (decryptedText && !decryptedText.startsWith("خطا")) {
+                                cipherList.push({
+                                    id: doc.id,
+                                    text: decryptedText,
+                                    createdAt: data.createdAt 
+                                });
+                            }
+                        } catch (e) {
+                            console.error("Error decrypting cipher in library:", e);
+                        }
+                    }
+                });
+                
+                // مرتب‌سازی سمت کاربر بر اساس زمان ساخت (جدیدترین‌ها اول)
+                cipherList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                renderCiphers(cipherList);
+            }, (error) => {
+                console.error("Error setting up library listener:", error);
+                resultsArea.innerHTML = `<p class="text-center text-red-500 mt-10">خطا در بارگذاري کتابخانه پیام‌ها. (لطفاً اتصال خود را بررسی کنید)</p>`;
+            });
+        }
+
 
         // --- راه‌اندازي فايربيس ---
         async function setupFirebase() {
@@ -323,9 +422,25 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        userInfoDisplay.textContent = `User: ${userId.substring(0, 8)}...`;
+                        userInfoDisplay.textContent = `User: ${userId.substring(0, 8)}...`; 
                         isAuthReady = true;
+
+                        // --- منطق حیاتی پس از احراز هویت موفق ---
+                        // 1. حذف پیام لودینگ
+                        if (initialLoading) {
+                            initialLoading.remove();
+                        }
+                        // 2. فعال‌سازی ورودی
+                        searchInput.disabled = false;
+                        // 3. تنظیم حالت اولیه برنامه برای تعامل
+                        switchMode('encode'); 
+                        // --- پایان منطق حیاتی ---
+
+                        if (currentMode === 'library') {
+                            setupLibraryListener();
+                        }
                     } else {
+                        // در صورت عدم احراز هویت اولیه، با توکن اختصاصی یا ناشناس وارد شو
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
@@ -336,48 +451,79 @@
 
             } catch (error) {
                 console.error("خطا در راه‌اندازي فايربيس (Auth/DB):", error);
-                // تنها پيام خطاي سيستمي در اينجا مجاز است.
-                displayError("خطا در اتصال به سرويس. لطفاً مرورگر را رفرش کنيد.");
+                // اگر اتصال به Firebase کلاً شکست خورد، یک خطای دائمی نمایش بده
+                resultsArea.innerHTML = `
+                    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg mt-10" role="alert">
+                        <p class="font-bold mb-1">خطای بحرانی در اتصال:</p>
+                        <p>برنامه نتوانست به سرویس‌های ابری متصل شود. لطفاً اتصال اینترنت خود را بررسی کرده و صفحه را رفرش کنید.</p>
+                    </div>
+                `;
             }
         }
         
         // --- منطق تغيير حالت (Mode Switching) ---
 
         function switchMode(mode) {
+            // قطع شنونده کتابخانه قبل از تغییر حالت
+            if (unsubscribeLibrary) {
+                unsubscribeLibrary();
+                unsubscribeLibrary = null;
+            }
+            
             currentMode = mode;
             
             // پاکسازي حالت فعال از همه تب‌ها
             searchTab.classList.remove('tab-active');
             newsTab.classList.remove('tab-active');
-            imagesTab.classList.remove('tab-active');
+            libraryTab.classList.remove('tab-active');
             mapsTab.classList.remove('tab-active');
             
             searchInput.value = '';
             resultsArea.innerHTML = '';
             decryptionBox.classList.add('hidden');
-            modeStatus.innerHTML = ''; // اطمينان از خالي بودن وضعيت
+            modeStatus.innerHTML = ''; 
 
             // تنظيم حالت فعال بر اساس کليک
             let activeTabElement;
-            const placeholderText = ""; 
-            const statusHTML = ""; 
+            let placeholderText = ""; 
             let inputDirection = 'rtl';
             
+            // مدیریت نمایش کادر ورودی
+            searchInput.classList.remove('hidden');
+
             if (mode === 'encode') {
                 activeTabElement = searchTab;
                 inputDirection = 'rtl';
+                placeholderText = "متن خود را وارد و Enter کنید تا رمزگذاری و عمومی شود...";
                 
             } else if (mode === 'decode') {
                 activeTabElement = newsTab;
                 inputDirection = 'ltr'; 
+                placeholderText = "کلید نامرئی را اینجا کپی کنید...";
                 
-            } else if (mode === 'images') {
-                activeTabElement = imagesTab;
+            } else if (mode === 'library') {
+                activeTabElement = libraryTab;
                 inputDirection = 'rtl';
+                placeholderText = "جستجو در پیام‌های کتابخانه (فقط نمایش).";
+                searchInput.classList.add('hidden'); // پنهان کردن کادر ورودی در حالت کتابخانه
                 
+                // شروع شنونده کتابخانه
+                if (isAuthReady && db) {
+                    setupLibraryListener();
+                } else if (!isAuthReady) {
+                    // نمایش پیام لودینگ اگر Auth هنوز آماده نیست
+                     resultsArea.innerHTML = `
+                        <div class="text-center mt-10">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                            <p class="text-gray-500">در انتظار اتصال امن...</p>
+                        </div>
+                    `;
+                }
+
             } else if (mode === 'maps') {
                 activeTabElement = mapsTab;
                 inputDirection = 'rtl';
+                placeholderText = "نقشه‌ها (عملیات تعریف نشده)";
             }
             
             if (activeTabElement) {
@@ -386,7 +532,6 @@
 
             // اعمال تغييرات به DOM
             searchInput.placeholder = placeholderText; 
-            modeStatus.innerHTML = statusHTML; 
             searchInput.style.direction = inputDirection;
             
             searchInput.focus();
@@ -394,6 +539,9 @@
 
         // --- منطق مشترک براي پردازش ورودي ---
         function handleInput(e) {
+            // جلوگیری از پردازش ورودی در حالت کتابخانه
+            if (currentMode === 'library' || currentMode === 'maps') return;
+            
             decryptionBox.classList.add('hidden');
             resultsArea.innerHTML = ''; // پاکسازي نتايج قبلي
             modeStatus.innerHTML = ''; // حذف هرگونه پيام وضعيت
@@ -438,7 +586,8 @@
 
         async function encryptAndSave(plaintext) {
             if (!isAuthReady || !db) {
-                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست.");
+                // اگر کاربر قبل از آمادگی، تلاش به تعامل کرد، دوباره پیام خطا را نمایش میدهیم
+                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست. لطفاً چند لحظه صبر کنید.");
                 return;
             }
 
@@ -457,7 +606,7 @@
 
         async function decryptAndFetch(stealthKeyInput) {
             if (!isAuthReady || !db) {
-                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست.");
+                displayError("خطا: احراز هويت يا پايگاه داده آماده نيست. لطفاً چند لحظه صبر کنید.");
                 return;
             }
             
@@ -521,9 +670,10 @@
         }
 
         function displayError(message) {
+            // این تابع برای خطاهای غیرقابل رفع است که نیاز به نمایش دائمی دارند
             resultsArea.innerHTML = `
                 <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-lg" role="alert">
-                    <p class="font-bold mb-1">خطا:</p>
+                    <p class="font-bold mb-1">Error:</p>
                     <p>${message}</p>
                 </div>
             `;
@@ -571,16 +721,15 @@
             retryButton.addEventListener('click', () => {
                 if (copyToClipboard(stealthKey)) {
                     // --- تغييرات جديد: حذف پيام متني و فقط تغيير بصري ---
-                    statusMessage.innerHTML = ''; // پيام وضعيت را خالي نگه مي‌داريم
+                    statusMessage.innerHTML = ''; 
                     retryButton.classList.remove('bg-blue-600', 'bg-red-600');
                     retryButton.classList.add('bg-green-600');
-                    // *** خطي که متن دکمه را به 'Copied' تغيير مي‌داد حذف شد. ***
+                    retryButton.textContent = "Copied!"; // نمایش موقت "Copied!"
 
                     // پاک کردن پيام پس از 3 ثانيه براي بازگشت به حالت اوليه
                     setTimeout(() => {
                         resultsArea.innerHTML = '';
-                        // اطمينان از بازگشت دکمه به رنگ آبي اصلي (گرچه با حذف resultsArea ديگر مهم نيست)
-                        // اما براي تميزي کد:
+                        // اطمينان از بازگشت دکمه به رنگ آبي اصلي 
                         retryButton.classList.remove('bg-green-600');
                         retryButton.classList.add('bg-blue-600'); 
                         retryButton.textContent = originalButtonText;
@@ -593,7 +742,7 @@
                     statusMessage.innerHTML = '<span class="text-red-600 font-bold">Error:</span> Manual copy failed. Please try reloading.';
                     retryButton.classList.remove('bg-blue-600');
                     retryButton.classList.add('bg-red-600');
-                    retryButton.textContent = originalButtonText; // اطمينان از حفظ متن اصلي
+                    retryButton.textContent = originalButtonText; 
                 }
             });
         }
@@ -608,16 +757,14 @@
 
             // در حالت موفقيت (Success)
             if (!isError) {
-                // متن رمزگشايي شده با رنگ عادي (خاکستري تيره) نمايش داده مي‌شود
                 decryptedText.classList.remove('text-red-500'); 
                 decryptedText.classList.add('text-gray-800');
                 titleElement.textContent = "";
 
             // در حالت خطا (Error)
             } else {
-                 // پيام خطاي نامحسوس
                  decryptedText.classList.remove('text-gray-800');
-                 decryptedText.classList.add('text-red-500'); // براي نشان دادن خطا
+                 decryptedText.classList.add('text-red-500'); 
                  titleElement.textContent = "";
             }
 
@@ -641,7 +788,7 @@
 
         searchTab.addEventListener('click', () => switchMode('encode'));
         newsTab.addEventListener('click', () => switchMode('decode'));
-        imagesTab.addEventListener('click', () => switchMode('images'));
+        libraryTab.addEventListener('click', () => switchMode('library')); 
         mapsTab.addEventListener('click', () => switchMode('maps'));
 
         searchInput.addEventListener('keydown', handleInput); 
@@ -649,8 +796,7 @@
         
         // --- مقداردهي اوليه ---
         setupFirebase();
-        switchMode('encode'); 
-
+        // switchMode('encode'); // این دستور حذف شد تا منتظر آماده شدن احراز هویت بماند
     </script>
 </body>
 </html>
